@@ -10,7 +10,7 @@ inspect :; forge inspect ${contract} storage-layout --pretty
 
 # specify which fork to use. set this in our .env
 # if we want to test multiple forks in one go, remove this as an argument below
-FORK_URL := ${ETH_RPC_URL} # BASE_RPC_URL, ETH_RPC_URL, ARBITRUM_RPC_URL
+FORK_URL := ${ETH_RPC_URL} # BASE_RPC_URL, ETH_RPC_URL, ARBITRUM_RPC_URL, TENDERLY_ETH_URL, TENDERLY_BASE_URL
 
 # if we want to run only matching tests, set that here
 test := test_
@@ -33,5 +33,6 @@ coverage :; forge coverage --fork-url ${FORK_URL}
 coverage-report :; forge coverage --report lcov --fork-url ${FORK_URL}
 coverage-debug :; forge coverage --report debug --fork-url ${FORK_URL}
 
+debug :; forge test --debug --match-test $(test)
 
 clean  :; forge clean
