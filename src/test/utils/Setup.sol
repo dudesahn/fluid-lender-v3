@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
-import {Strategy, ERC20} from "../../Strategy.sol";
-import {StrategyFactory} from "../../StrategyFactory.sol";
+import {StrategyFluidLender, ERC20, SafeERC20} from "../../FluidLender.sol"; // make sure to use SafeERC20 for USDT
+import {FluidLenderFactory} from "../../FluidLenderFactory.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 
 // Inherit the events so they can be checked if desired.
@@ -20,20 +20,25 @@ interface IFactory {
 }
 
 contract Setup is ExtendedTest, IEvents {
+    using SafeERC20 for ERC20;
+
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
 
-    StrategyFactory public strategyFactory;
+    FluidLenderFactory public strategyFactory;
 
     mapping(string => address) public tokenAddrs;
 
     // Addresses for different roles we will use repeatedly.
-    address public user = address(10);
+    address public user = address(6969);
     address public keeper = address(4);
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public emergencyAdmin = address(5);
+
+    address public fluidVault;
+    address public fluidStaking;
 
     // Address of the real deployed Factory
     address public factory;
@@ -43,7 +48,7 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount = 1e30;
+    uint256 public maxFuzzAmount = 1e18; // 1e30 for 1e18 coin == 1e18 for 1e6 coin. 1e15 = 1B USDC.
     uint256 public minFuzzAmount = 10_000;
 
     // Default profit max unlock time is set for 10 days
@@ -53,12 +58,31 @@ contract Setup is ExtendedTest, IEvents {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["USDC"]);
+
+        // Fluid specific
+        // USDT
+        // fluidVault = 0x5C20B550819128074FD538Edf79791733ccEdd18;
+        // fluidStaking = 0x490681095ed277B45377d28cA15Ac41d64583048;
+
+        // // USDC
+        fluidVault = 0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33;
+        fluidStaking = 0x2fA6c95B69c10f9F52b8990b6C03171F13C46225;
+
+        // Can use standalone 4626 as strategy here
+        // // WETH
+        // fluidVault = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
+        // fluidStaking = 0x0000000000000000000000000000000000000000;
+        // // WSTETH
+        // fluidVault = 0x2411802D8BEA09be0aF8fD8D08314a63e706b29C;
+        // fluidStaking = 0x0000000000000000000000000000000000000000;
 
         // Set decimals
         decimals = asset.decimals();
 
-        strategyFactory = new StrategyFactory(
+        // deploy our factory and strategy
+        vm.startPrank(management);
+        strategyFactory = new FluidLenderFactory(
             management,
             performanceFeeRecipient,
             keeper,
@@ -66,7 +90,16 @@ contract Setup is ExtendedTest, IEvents {
         );
 
         // Deploy strategy and set variables
-        strategy = IStrategyInterface(setUpStrategy());
+        strategy = IStrategyInterface(
+            strategyFactory.newFluidLender(
+                address(asset),
+                "Fluid Lender USDT",
+                fluidVault,
+                fluidStaking
+            )
+        );
+        strategy.acceptManagement();
+        vm.stopPrank();
 
         factory = strategy.FACTORY();
 
@@ -77,23 +110,13 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(management, "management");
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
-    }
-
-    function setUpStrategy() public returns (address) {
-        // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy = IStrategyInterface(
-            address(
-                strategyFactory.newStrategy(
-                    address(asset),
-                    "Tokenized Strategy"
-                )
-            )
-        );
-
-        vm.prank(management);
-        _strategy.acceptManagement();
-
-        return address(_strategy);
+        vm.label(emergencyAdmin, "emergencyAdmin");
+        vm.label(0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33, "fluidUSDC");
+        vm.label(0x2fA6c95B69c10f9F52b8990b6C03171F13C46225, "fUSDC Staking");
+        vm.label(0x5C20B550819128074FD538Edf79791733ccEdd18, "fluidUSDT");
+        vm.label(0x490681095ed277B45377d28cA15Ac41d64583048, "fUSDT Staking");
+        vm.label(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, "USDC");
+        vm.label(0xdAC17F958D2ee523a2206206994597C13D831ec7, "USDT");
     }
 
     function depositIntoStrategy(
@@ -102,7 +125,7 @@ contract Setup is ExtendedTest, IEvents {
         uint256 _amount
     ) public {
         vm.prank(_user);
-        asset.approve(address(_strategy), _amount);
+        asset.forceApprove(address(_strategy), _amount);
 
         vm.prank(_user);
         _strategy.deposit(_amount, _user);
