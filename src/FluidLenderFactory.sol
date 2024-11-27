@@ -28,6 +28,11 @@ contract FluidLenderFactory {
         emergencyAdmin = _emergencyAdmin;
     }
 
+    modifier onlyManagement() {
+        require(msg.sender == management, "!management");
+        _;
+    }
+
     /**
      * @notice Deploy a new Fluid Lender Strategy.
      * @dev This will set the msg.sender to all of the permissioned roles. Can only be called by management.
@@ -40,7 +45,7 @@ contract FluidLenderFactory {
         string memory _name,
         address _vault,
         address _staking
-    ) external returns (address) {
+    ) external onlyManagement returns (address) {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface newStrategy = IStrategyInterface(
