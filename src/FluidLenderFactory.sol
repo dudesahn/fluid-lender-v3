@@ -10,7 +10,6 @@ contract FluidLenderFactory {
     address public management;
     address public performanceFeeRecipient;
     address public keeper;
-
     address public immutable emergencyAdmin;
 
     /// @notice Track the deployments. asset => strategy
