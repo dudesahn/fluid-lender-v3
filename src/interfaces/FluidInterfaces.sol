@@ -1,16 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "src/periphery/FluidStructs.sol";
 
-interface IStaking is IERC20 {
-    // View functions
-    function stakingToken() external view returns (address);
+interface IMerkleRewards {
+    function claim(
+        address recipient_,
+        uint256 cumulativeAmount_,
+        uint8 positionType_,
+        bytes32 positionId_,
+        uint256 cycle_,
+        bytes32[] calldata merkleProof_,
+        bytes memory metadata_
+    ) external;
+}
 
-    // User functions
-    function stake(uint256 amount) external;
+interface ILendingResolver {
+    function getFTokenDetails(
+        address fToken_
+    ) external view returns (FluidStructs.FTokenDetails memory fTokenDetails_);
+}
 
-    function withdraw(uint256 amount) external;
-
-    function getReward() external;
+interface ILiquidtyResolver {
+    function getOverallTokenData(
+        address token_
+    )
+        external
+        view
+        returns (FluidStructs.OverallTokenData memory overallTokenData_);
 }

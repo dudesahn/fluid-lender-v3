@@ -8,6 +8,17 @@ contract ShutdownTest is Setup {
         super.setUp();
     }
 
+    function test_shutdown_max_util() public {
+        // Deposit into strategy
+        uint256 userDeposit = 100_000e6;
+        mintAndDepositIntoStrategy(strategy, user, userDeposit);
+        bool isMaxUtil = causeMaxUtil(userDeposit);
+        if (!isMaxUtil) {
+            console2.log("Skip test, not max util for this market");
+            return;
+        }
+    }
+
     function test_shutdownCanWithdraw(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 

@@ -19,12 +19,12 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation_fuzz(uint256 _amount) public {
+    // note that this test only considers base yield (underlying lending and in-kind rewards APR)
+    function test_operation_fuzzy(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
-
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
@@ -38,8 +38,8 @@ contract OperationTest is Setup {
         assertGe(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
+        // skip time to unlock any profit we've earned
         skip(strategy.profitMaxUnlockTime());
-
         uint256 balanceBefore = asset.balanceOf(user);
 
         // check that we are tracking our deposits correctly

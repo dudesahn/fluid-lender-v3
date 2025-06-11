@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {StrategyFluidLender} from "./FluidLender.sol";
-import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
+import {FluidLenderPolygon} from "src/FluidLenderPolygon.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
-contract FluidLenderFactory {
+contract FluidLenderFactoryPolygon {
     event NewFluidLender(address indexed strategy, address indexed asset);
 
     address public management;
@@ -27,6 +27,11 @@ contract FluidLenderFactory {
         emergencyAdmin = _emergencyAdmin;
     }
 
+    modifier onlyManagement() {
+        require(msg.sender == management, "!management");
+        _;
+    }
+
     /**
      * @notice Deploy a new Fluid Lender Strategy.
      * @dev This will set the msg.sender to all of the permissioned roles. Can only be called by management.
@@ -37,13 +42,12 @@ contract FluidLenderFactory {
     function newFluidLender(
         address _asset,
         string memory _name,
-        address _vault,
-        address _staking
-    ) external returns (address) {
+        address _vault
+    ) external onlyManagement returns (address) {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface newStrategy = IStrategyInterface(
-            address(new StrategyFluidLender(_asset, _name, _vault, _staking))
+            address(new FluidLenderPolygon(_asset, _name, _vault))
         );
         newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
 

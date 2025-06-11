@@ -3,14 +3,18 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Setup} from "./utils/Setup.sol";
 
-import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
+import {FluidAprOracleMainnet} from "src/periphery/FluidAprOracleMainnet.sol";
 
 contract OracleTest is Setup {
-    StrategyAprOracle public oracle;
+    FluidAprOracleMainnet public oracle;
 
     function setUp() public override {
         super.setUp();
-        oracle = new StrategyAprOracle();
+        oracle = new FluidAprOracleMainnet(
+            management,
+            lendingResolver,
+            liquidityResolver
+        );
     }
 
     function checkOracle(address _strategy, uint256 _delta) public {
@@ -22,6 +26,7 @@ contract OracleTest is Setup {
         // Should be greater than 0 but likely less than 100%
         assertGt(currentApr, 0, "ZERO");
         assertLt(currentApr, 1e18, "+100%");
+        console2.log("APR", currentApr);
 
         // TODO: Uncomment to test the apr goes up and down based on debt changes
         /**

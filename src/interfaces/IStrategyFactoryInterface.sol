@@ -6,7 +6,13 @@ interface IStrategyFactoryInterface {
         address _asset,
         string memory _name,
         address _vault,
-        address _staking
+        uint24 _feeBaseToAsset
+    ) external returns (address);
+
+    function newFluidLender(
+        address _asset,
+        string memory _name,
+        address _vault
     ) external returns (address);
 
     function management() external view returns (address);
