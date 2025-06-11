@@ -4,9 +4,12 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
-import {StrategyFluidLender, ERC20, SafeERC20} from "../../FluidLender.sol"; // make sure to use SafeERC20 for USDT
-import {FluidLenderFactory} from "../../FluidLenderFactory.sol";
-import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {FluidLenderMainnet, ERC20, SafeERC20} from "src/FluidLenderMainnet.sol"; // make sure to use SafeERC20 for USDT
+import {FluidLenderFactoryMainnet} from "src/FluidLenderFactoryMainnet.sol";
+import {FluidLenderFactoryL2} from "src/FluidLenderFactoryL2.sol";
+import {FluidLenderFactoryPolygon} from "src/FluidLenderFactoryPolygon.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IStrategyFactoryInterface} from "src/interfaces/IStrategyFactoryInterface.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -19,6 +22,16 @@ interface IFactory {
     function set_protocol_fee_recipient(address) external;
 }
 
+// use this to simulate max utilization
+interface IFluidLiquidityVault {
+    function operate(
+        uint256,
+        int256,
+        int256,
+        address
+    ) external returns (uint256, int256, int256);
+}
+
 contract Setup is ExtendedTest, IEvents {
     using SafeERC20 for ERC20;
 
@@ -26,7 +39,7 @@ contract Setup is ExtendedTest, IEvents {
     ERC20 public asset;
     IStrategyInterface public strategy;
 
-    FluidLenderFactory public strategyFactory;
+    IStrategyFactoryInterface public strategyFactory;
 
     mapping(string => address) public tokenAddrs;
 
@@ -39,6 +52,11 @@ contract Setup is ExtendedTest, IEvents {
 
     address public fluidVault;
     address public fluidStaking;
+    uint24 public baseToAsset;
+
+    // addresses of our resolvers
+    address public lendingResolver;
+    address public liquidityResolver;
 
     // Address of the real deployed Factory
     address public factory;
@@ -57,47 +75,133 @@ contract Setup is ExtendedTest, IEvents {
     function setUp() public virtual {
         _setTokenAddrs();
 
-        // Set asset
+        // Set asset. This is all we should have to adjust, along with using a different network in our makefile
         asset = ERC20(tokenAddrs["USDC"]);
 
-        // Fluid specific
-        // USDT
-        // fluidVault = 0x5C20B550819128074FD538Edf79791733ccEdd18;
-        // fluidStaking = 0x490681095ed277B45377d28cA15Ac41d64583048;
+        // adjust asset here ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️
 
-        // // USDC
-        fluidVault = 0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33;
-        fluidStaking = 0x2fA6c95B69c10f9F52b8990b6C03171F13C46225;
-
-        // Can use standalone 4626 as strategy here
-        // // WETH
-        // fluidVault = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
-        // fluidStaking = 0x0000000000000000000000000000000000000000;
-        // // WSTETH
-        // fluidVault = 0x2411802D8BEA09be0aF8fD8D08314a63e706b29C;
-        // fluidStaking = 0x0000000000000000000000000000000000000000;
+        if (block.chainid == 1) {
+            if (address(asset) == tokenAddrs["USDC"]) {
+                fluidVault = 0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33;
+                baseToAsset = 500;
+            } else if (address(asset) == tokenAddrs["USDT"]) {
+                fluidVault = 0x5C20B550819128074FD538Edf79791733ccEdd18;
+                baseToAsset = 500;
+            } else {
+                // weth
+                fluidVault = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
+            }
+        } else if (block.chainid == 137) {
+            if (address(asset) == tokenAddrs["USDC"]) {
+                fluidVault = 0x571d456b578fDC34E26E6D636736ED7c0CDB9d89;
+            } else if (address(asset) == tokenAddrs["USDT"]) {
+                fluidVault = 0x6f5e34eFf43D9ab7c977512509C53840B5EfBA85;
+            } else {
+                // weth
+                fluidVault = 0xD3154535E4D0e179583ad694859E4e876EB12d24;
+            }
+        } else if (block.chainid == 8453) {
+            if (address(asset) == tokenAddrs["USDC"]) {
+                fluidVault = 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169;
+            } else {
+                // weth
+                fluidVault = 0x9272D6153133175175Bc276512B2336BE3931CE9;
+            }
+        } else if (block.chainid == 42161) {
+            if (address(asset) == tokenAddrs["USDC"]) {
+                fluidVault = 0x1A996cb54bb95462040408C06122D45D6Cdb6096;
+            } else if (address(asset) == tokenAddrs["USDT"]) {
+                fluidVault = 0x4A03F37e7d3fC243e3f99341d36f4b829BEe5E03;
+            } else {
+                // weth
+                fluidVault = 0x45Df0656F8aDf017590009d2f1898eeca4F0a205;
+            }
+        }
 
         // Set decimals
         decimals = asset.decimals();
 
         // deploy our factory and strategy
         vm.startPrank(management);
-        strategyFactory = new FluidLenderFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            emergencyAdmin
-        );
 
-        // Deploy strategy and set variables
-        strategy = IStrategyInterface(
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender USDT",
-                fluidVault,
-                fluidStaking
-            )
-        );
+        if (block.chainid == 1) {
+            lendingResolver = 0xC215485C572365AE87f908ad35233EC2572A3BEC;
+            liquidityResolver = 0xF82111c4354622AB12b9803cD3F6164FCE52e847;
+
+            strategyFactory = IStrategyFactoryInterface(
+                address(
+                    new FluidLenderFactoryMainnet(
+                        management,
+                        performanceFeeRecipient,
+                        keeper,
+                        emergencyAdmin
+                    )
+                )
+            );
+
+            // Deploy strategy and set variables
+            strategy = IStrategyInterface(
+                strategyFactory.newFluidLender(
+                    address(asset),
+                    "Fluid Lender",
+                    fluidVault,
+                    baseToAsset
+                )
+            );
+        } else if (block.chainid == 137) {
+            lendingResolver = 0x8e72291D5e6f4AAB552cc827fB857a931Fc5CAC1;
+            liquidityResolver = 0x98d900e25AAf345A4B23f454751EC5083443Fa83;
+
+            strategyFactory = IStrategyFactoryInterface(
+                address(
+                    new FluidLenderFactoryPolygon(
+                        management,
+                        performanceFeeRecipient,
+                        keeper,
+                        emergencyAdmin
+                    )
+                )
+            );
+
+            // Deploy strategy and set variables
+            strategy = IStrategyInterface(
+                strategyFactory.newFluidLender(
+                    address(asset),
+                    "Fluid Lender",
+                    fluidVault
+                )
+            );
+        } else {
+            if (block.chainid == 8453) {
+                lendingResolver = 0x3aF6FBEc4a2FE517F56E402C65e3f4c3e18C1D86;
+                liquidityResolver = 0x35A915336e2b3349FA94c133491b915eD3D3b0cd;
+            } else {
+                // arbitrum
+                lendingResolver = 0xdF4d3272FfAE8036d9a2E1626Df2Db5863b4b302;
+                liquidityResolver = 0x46859d33E662d4bF18eEED88f74C36256E606e44;
+            }
+
+            // L2s
+            strategyFactory = IStrategyFactoryInterface(
+                address(
+                    new FluidLenderFactoryL2(
+                        management,
+                        performanceFeeRecipient,
+                        keeper,
+                        emergencyAdmin
+                    )
+                )
+            );
+
+            // Deploy strategy and set variables
+            strategy = IStrategyInterface(
+                strategyFactory.newFluidLender(
+                    address(asset),
+                    "Fluid Lender",
+                    fluidVault
+                )
+            );
+        }
         strategy.acceptManagement();
         vm.stopPrank();
 
@@ -111,12 +215,70 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
         vm.label(emergencyAdmin, "emergencyAdmin");
-        vm.label(0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33, "fluidUSDC");
-        vm.label(0x2fA6c95B69c10f9F52b8990b6C03171F13C46225, "fUSDC Staking");
-        vm.label(0x5C20B550819128074FD538Edf79791733ccEdd18, "fluidUSDT");
-        vm.label(0x490681095ed277B45377d28cA15Ac41d64583048, "fUSDT Staking");
-        vm.label(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, "USDC");
-        vm.label(0xdAC17F958D2ee523a2206206994597C13D831ec7, "USDT");
+        if (block.chainid == 1) {
+            vm.label(0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33, "fluidUSDC");
+            vm.label(0x5C20B550819128074FD538Edf79791733ccEdd18, "fluidUSDT");
+            vm.label(0x90551c1795392094FE6D29B758EcCD233cFAa260, "fluidWETH");
+            vm.label(tokenAddrs["WETH"], "WETH");
+            vm.label(tokenAddrs["USDT"], "USDT");
+            vm.label(tokenAddrs["USDC"], "USDC");
+        } else if (block.chainid == 137) {
+            vm.label(0x571d456b578fDC34E26E6D636736ED7c0CDB9d89, "fluidUSDC");
+            vm.label(0x6f5e34eFf43D9ab7c977512509C53840B5EfBA85, "fluidUSDT");
+            vm.label(0xD3154535E4D0e179583ad694859E4e876EB12d24, "fluidWETH");
+            vm.label(tokenAddrs["WETH"], "WETH");
+            vm.label(tokenAddrs["USDT"], "USDT");
+            vm.label(tokenAddrs["USDC"], "USDC");
+        } else if (block.chainid == 8453) {
+            vm.label(0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169, "fluidUSDC");
+            vm.label(0x9272D6153133175175Bc276512B2336BE3931CE9, "fluidWETH");
+            vm.label(tokenAddrs["WETH"], "WETH");
+            vm.label(tokenAddrs["USDC"], "USDC");
+        } else if (block.chainid == 42161) {
+            vm.label(0x1A996cb54bb95462040408C06122D45D6Cdb6096, "fluidUSDC");
+            vm.label(0x4A03F37e7d3fC243e3f99341d36f4b829BEe5E03, "fluidUSDT");
+            vm.label(0x45Df0656F8aDf017590009d2f1898eeca4F0a205, "fluidWETH");
+            vm.label(tokenAddrs["WETH"], "WETH");
+            vm.label(tokenAddrs["USDT"], "USDT");
+            vm.label(tokenAddrs["USDC"], "USDC");
+        }
+    }
+
+    function causeMaxUtil(uint256 userDeposit) public returns (bool isMaxUtil) {
+        // borrow all the USDC in the liquidity contract using wstETH and then see how our strategy performs
+        // check usdc balance of fluid liquidity proxy (this is where our deposited funds flow)
+        address liquidity = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
+        uint256 toBorrow = (asset.balanceOf(liquidity) * 995) / 1_000; // leave 50 bps so it doesn't revert
+
+        if (
+            block.chainid == 8453 &&
+            fluidVault == 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169
+        ) {
+            address whale = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb; // morpho, wstETH, base
+
+            IFluidLiquidityVault liquidityVault = IFluidLiquidityVault(
+                0xbEC491FeF7B4f666b270F9D5E5C3f443cBf20991
+            );
+            ERC20 collateral_token = ERC20(
+                0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452
+            );
+
+            vm.startPrank(whale);
+            collateral_token.approve(
+                address(liquidityVault),
+                type(uint256).max
+            );
+
+            liquidityVault.operate(0, 5_000e18, int256(toBorrow), whale);
+            vm.stopPrank();
+            console2.log("Pushed market to max utilization");
+
+            // check balance of liquidity contract, make sure we have less left than user deposited
+            uint256 contractBalance = asset.balanceOf(liquidity);
+            assertGt(userDeposit, contractBalance, "!illiquid");
+            console2.log("Liquidity USDC balance:", contractBalance);
+            isMaxUtil = true;
+        }
     }
 
     function depositIntoStrategy(
@@ -179,12 +341,21 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function _setTokenAddrs() internal {
-        tokenAddrs["WBTC"] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
-        tokenAddrs["YFI"] = 0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e;
-        tokenAddrs["WETH"] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-        tokenAddrs["LINK"] = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-        tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        if (block.chainid == 1) {
+            tokenAddrs["WETH"] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+            tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+            tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        } else if (block.chainid == 8453) {
+            tokenAddrs["WETH"] = 0x4200000000000000000000000000000000000006;
+            tokenAddrs["USDC"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+        } else if (block.chainid == 42161) {
+            tokenAddrs["WETH"] = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
+            tokenAddrs["USDC"] = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
+            tokenAddrs["USDT"] = 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9;
+        } else if (block.chainid == 137) {
+            tokenAddrs["WETH"] = 0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619;
+            tokenAddrs["USDC"] = 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359;
+            tokenAddrs["USDT"] = 0xc2132D05D31c914a87C6611C10748AEb04B58e8F;
+        }
     }
 }
