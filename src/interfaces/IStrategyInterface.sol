@@ -60,4 +60,12 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      * @param _minAmountToSell minimum amount to sell in wei
      */
     function setMinAmountToSell(uint256 _minAmountToSell) external;
+
+    function openDeposits() external view returns (bool);
+
+    function allowed(address _depositor) external view returns (bool);
+
+    function setOpenDeposits(bool _openDeposits) external;
+
+    function setAllowed(address _depositor, bool _allowed) external;
 }

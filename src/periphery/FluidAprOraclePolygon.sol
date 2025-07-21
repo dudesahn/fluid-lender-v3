@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.28;
 
 import "src/periphery/FluidStructs.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
@@ -11,14 +11,22 @@ contract FluidAprOraclePolygon {
     /// @notice Operator role can set rewardTokensPerSecond
     address public operator;
 
-    /// @notice Fluid's lending resolver contract. Address differs by chain.
-    address public immutable lendingResolver;
-
-    /// @notice Fluid's liquidity resolver contract. Address differs by chain.
-    address public immutable liquidityResolver;
+    /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
+    bool public useManualRewardsApr;
 
     /// @notice Mapping for Fluid market => reward tokens per second (in WPOL)
     mapping(address market => uint256 rewardTokensPerSecond) public rewards;
+
+    /// @notice Mapping for Fluid market => manual rewards apr
+    mapping(address market => uint256 rewardsApr) public manualRewardsApr;
+
+    /// @notice Fluid's lending resolver contract.
+    ILendingResolver public constant LENDING_RESOLVER =
+        ILendingResolver(0x8e72291D5e6f4AAB552cc827fB857a931Fc5CAC1);
+
+    /// @notice Fluid's liquidity resolver contract.
+    ILiquidtyResolver public constant LIQUIDITY_RESOLVER =
+        ILiquidtyResolver(0x98d900e25AAf345A4B23f454751EC5083443Fa83);
 
     // internal state vars used for pricing WPOL
     address constant UNISWAP_V3_ROUTER =
@@ -27,14 +35,8 @@ contract FluidAprOraclePolygon {
     address constant USDC = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
     uint256 constant YEAR = 31536000;
 
-    constructor(
-        address _operator,
-        address _lendingResolver,
-        address _liquidityResolver
-    ) {
+    constructor(address _operator) {
         operator = _operator;
-        lendingResolver = _lendingResolver;
-        liquidityResolver = _liquidityResolver;
     }
 
     // uint256 baseApr = 1e14 * resolver.getFTokenDetails(fToken).supplyRate // returned in bps from resolver
@@ -89,15 +91,13 @@ contract FluidAprOraclePolygon {
     ) external view returns (uint256 apr) {
         address fToken = IBase4626Compounder(_strategy).vault();
 
-        FluidStructs.FTokenDetails memory tokenDetails = ILendingResolver(
-            lendingResolver
-        ).getFTokenDetails(fToken);
+        FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
+            .getFTokenDetails(fToken);
         uint256 supplyRate = tokenDetails.supplyRate * 1e14;
-        uint256 assetRewardRate = tokenDetails.rewardsRate * 1e14;
+        uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4;
 
-        FluidStructs.OverallTokenData memory tokenData = ILiquidtyResolver(
-            liquidityResolver
-        ).getOverallTokenData(ERC4626(fToken).asset());
+        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
+            .getOverallTokenData(ERC4626(fToken).asset());
 
         // calculate what our new assets will be
         uint256 assets = tokenDetails.totalAssets;
@@ -127,11 +127,19 @@ contract FluidAprOraclePolygon {
 
         uint256 polRewardRate;
         // check our mapping to see if we have any rewardsRates set
-        // note that these calculations expect only USDC or USDT to have WPOL rewards (6 decimals)
-        if (rewards[fToken] != 0) {
-            // adjust based on changes in assets
-            uint256 polPriceUSDC = getPolPriceUsdc();
-            polRewardRate = (polPriceUSDC * rewards[fToken] * YEAR) / assets;
+        // note that these calculations expect only stablecoins to have extra rewards
+        if (rewards[fToken] != 0 || useManualRewardsApr) {
+            if (useManualRewardsApr) {
+                polRewardRate = manualRewardsApr[fToken];
+            } else {
+                // adjust based on changes in assets
+                uint256 polPriceUSDC = getPolPriceUsdc();
+                uint256 decimalsAdjustment = 10 **
+                    (ERC4626(fToken).decimals() - 6);
+                polRewardRate =
+                    (polPriceUSDC * rewards[fToken] * YEAR) /
+                    assets;
+            }
         }
 
         apr = supplyRate + assetRewardRate + polRewardRate;
@@ -153,16 +161,114 @@ contract FluidAprOraclePolygon {
         );
     }
 
-    function setRewards(
-        address _markets,
+    function getSupplyRate(
+        address _strategy,
+        int256 _delta
+    ) external view returns (uint256 supplyRate) {
+        address fToken = IBase4626Compounder(_strategy).vault();
+
+        FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
+            .getFTokenDetails(fToken);
+        supplyRate = tokenDetails.supplyRate * 1e14;
+
+        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
+            .getOverallTokenData(ERC4626(fToken).asset());
+
+        // calculate what our new assets will be
+        uint256 supply = tokenData.totalSupply - tokenData.supplyInterestFree;
+        uint256 oldSupply = supply;
+        if (_delta < 0) {
+            supply = supply - uint256(-_delta);
+        } else {
+            supply = supply + uint256(_delta);
+        }
+
+        if (supply == 0) {
+            return 0;
+        }
+
+        // adjust based on changes in supply
+        supplyRate = (supplyRate * oldSupply) / supply;
+    }
+
+    function getRewardRates(
+        address _strategy,
+        int256 _delta
+    ) external view returns (uint256 assetRewardRate, uint256 polRewardRate) {
+        address fToken = IBase4626Compounder(_strategy).vault();
+
+        FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
+            .getFTokenDetails(fToken);
+        assetRewardRate = tokenDetails.rewardsRate * 1e4;
+
+        // calculate what our new assets will be
+        uint256 assets = tokenDetails.totalAssets;
+        if (_delta < 0) {
+            assets = assets - uint256(-_delta);
+        } else {
+            assets = assets + uint256(_delta);
+        }
+
+        if (assets == 0) {
+            return (0, 0);
+        }
+
+        // adjust based on changes in assets
+        if (assetRewardRate > 0) {
+            assetRewardRate =
+                (assetRewardRate * tokenDetails.totalAssets) /
+                assets;
+        }
+
+        // check our mapping to see if we have any rewardsRates set
+        // note that these calculations expect only stablecoins to have extra rewards
+        if (rewards[fToken] != 0 || useManualRewardsApr) {
+            if (useManualRewardsApr) {
+                polRewardRate = manualRewardsApr[fToken];
+            } else {
+                // adjust based on changes in assets
+                uint256 polPriceUSDC = getPolPriceUsdc();
+                uint256 decimalsAdjustment = 10 **
+                    (ERC4626(fToken).decimals() - 6);
+                polRewardRate =
+                    (polPriceUSDC *
+                        rewards[fToken] *
+                        YEAR *
+                        decimalsAdjustment) /
+                    assets;
+            }
+        }
+    }
+
+    function setRewardsRate(
+        address _market,
         uint256 _rewardTokensPerSecond
     ) external {
         require(msg.sender == operator, "!operator");
-        rewards[_markets] = _rewardTokensPerSecond;
+        if (_rewardTokensPerSecond > 0) {
+            require(!useManualRewardsApr, "!rewards");
+        }
+        rewards[_market] = _rewardTokensPerSecond;
+    }
+
+    function setManualRewardsApr(
+        address _market,
+        uint256 _manualRewardsApr
+    ) external {
+        require(msg.sender == operator, "!operator");
+        if (_manualRewardsApr > 0) {
+            require(useManualRewardsApr, "!manualRewards");
+        }
+        manualRewardsApr[_market] = _manualRewardsApr;
     }
 
     function setOperator(address _operator) external {
         require(msg.sender == operator, "!operator");
         operator = _operator;
+    }
+
+    function setUseManualRewardsApr(bool _useManualRewardsApr) external {
+        require(msg.sender == operator, "!operator");
+        useManualRewardsApr = _useManualRewardsApr;
     }
 }

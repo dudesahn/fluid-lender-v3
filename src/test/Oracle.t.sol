@@ -1,21 +1,142 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup} from "./utils/Setup.sol";
+import {Setup} from "src/test/utils/Setup.sol";
 
 import {FluidAprOracleMainnet} from "src/periphery/FluidAprOracleMainnet.sol";
+import {FluidAprOraclePolygon} from "src/periphery/FluidAprOraclePolygon.sol";
+import {FluidAprOracleArbitrum} from "src/periphery/FluidAprOracleArbitrum.sol";
+import {FluidAprOracleBase} from "src/periphery/FluidAprOracleBase.sol";
+import {IOracle} from "src/interfaces/IOracle.sol";
 
 contract OracleTest is Setup {
-    FluidAprOracleMainnet public oracle;
+    IOracle public oracle;
 
     function setUp() public override {
         super.setUp();
-        oracle = new FluidAprOracleMainnet(
-            management,
-            lendingResolver,
-            liquidityResolver
-        );
+        // deploy our factory and strategy
+        vm.startPrank(management);
+
+        if (block.chainid == 1) {
+            oracle = IOracle(address(new FluidAprOracleMainnet(management)));
+            // set the rewards rate for our oracle
+            oracle.setRewardsRate(fluidVault, extraRewardRate);
+        } else if (block.chainid == 137) {
+            oracle = IOracle(address(new FluidAprOraclePolygon(management)));
+            // set the rewards rate for our oracle
+            oracle.setRewardsRate(fluidVault, extraRewardRate);
+        } else if (block.chainid == 8453) {
+            // base
+            oracle = IOracle(address(new FluidAprOracleBase(management)));
+
+            // set the APR manually for our oracle
+            // oracle.setUseManualRewardsApr(true);
+            // oracle.setManualRewardsApr(fluidVault, manualRewardApr);
+
+            // set the rewards rate for our oracle
+            oracle.setRewardsRate(fluidVault, extraRewardRate);
+        } else {
+            // arbitrum
+            oracle = IOracle(address(new FluidAprOracleArbitrum(management)));
+
+            // set the APR manually for our oracle
+            // oracle.setUseManualRewardsApr(true);
+            // oracle.setManualRewardsApr(fluidVault, manualRewardApr);
+
+            // set the rewards rate for our oracle
+            oracle.setRewardsRate(fluidVault, extraRewardRate);
+        }
+        vm.stopPrank();
     }
+
+    function test_oracle_simple_check() public {
+        uint256 currentApr = oracle.aprAfterDebtChange(address(strategy), 0);
+        console2.log("Current APR:", currentApr);
+        console2.log("Current APR (whole number):", (currentApr * 100) / 1e18);
+
+        if (block.chainid == 1) {
+            uint256 supplyApr = oracle.getSupplyRate(address(strategy), 0);
+            console2.log("Current Supply APR:", supplyApr);
+            console2.log(
+                "Current Supply APR (whole number):",
+                (supplyApr * 100) / 1e18
+            );
+
+            (uint256 rewardsApr, uint256 fluidApr) = oracle.getRewardRates(
+                address(strategy),
+                0
+            );
+            console2.log("Current Rewards APR:", rewardsApr);
+            console2.log(
+                "Current Rewards APR (whole number):",
+                (rewardsApr * 100) / 1e18
+            );
+            console2.log("Current FLUID APR:", fluidApr);
+            console2.log(
+                "Current FLUID APR (whole number):",
+                (fluidApr * 100) / 1e18
+            );
+
+            uint256 fluidPrice = oracle.getFluidPriceUsdc();
+            console2.log("Current FLUID Price:", fluidPrice);
+            console2.log("Current FLUID Price (dollars):", (fluidPrice) / 1e6);
+        } else if (block.chainid == 137) {
+            uint256 supplyApr = oracle.getSupplyRate(address(strategy), 0);
+            console2.log("Current Supply APR:", supplyApr);
+            console2.log(
+                "Current Supply APR (whole number):",
+                (supplyApr * 100) / 1e18
+            );
+
+            (uint256 rewardsApr, uint256 polApr) = oracle.getRewardRates(
+                address(strategy),
+                0
+            );
+            console2.log("Current Rewards APR:", rewardsApr);
+            console2.log(
+                "Current Rewards APR (whole number):",
+                (rewardsApr * 100) / 1e18
+            );
+            console2.log("Current POL APR:", polApr);
+            console2.log(
+                "Current POL APR (whole number):",
+                (polApr * 100) / 1e18
+            );
+
+            uint256 polPrice = oracle.getPolPriceUsdc();
+            console2.log("Current POL Price:", polPrice);
+            console2.log("Current POL Price (dollars):", (polPrice) / 1e6);
+        } else {
+            // L2s
+            uint256 supplyApr = oracle.getSupplyRate(address(strategy), 0);
+            console2.log("Current Supply APR:", supplyApr);
+            console2.log(
+                "Current Supply APR (whole number):",
+                (supplyApr * 100) / 1e18
+            );
+
+            (uint256 rewardsApr, uint256 fluidApr) = oracle.getRewardRates(
+                address(strategy),
+                0
+            );
+            console2.log("Current Rewards APR:", rewardsApr);
+            console2.log(
+                "Current Rewards APR (whole number):",
+                (rewardsApr * 100) / 1e18
+            );
+            console2.log("Current FLUID APR:", fluidApr);
+            console2.log(
+                "Current FLUID APR (whole number):",
+                (fluidApr * 100) / 1e18
+            );
+
+            uint256 fluidPrice = oracle.getFluidPriceUsdc();
+            console2.log("Current FLUID Price:", fluidPrice);
+            console2.log("Current FLUID Price (dollars):", (fluidPrice) / 1e6);
+        }
+    }
+
+    // NOTE: need to setup the manual merkle reward amounts on the oracles for these tests after deployment...
 
     function checkOracle(address _strategy, uint256 _delta) public {
         // Check set up
@@ -24,6 +145,8 @@ contract OracleTest is Setup {
         uint256 currentApr = oracle.aprAfterDebtChange(_strategy, 0);
 
         // Should be greater than 0 but likely less than 100%
+        // mainnet and polygon should always have the merkle APR, no matter size (since it's fixed)
+        // L2s have the extra in-kind yield, which won't get fully diluted to zero either
         assertGt(currentApr, 0, "ZERO");
         assertLt(currentApr, 1e18, "+100%");
         console2.log("APR", currentApr);
@@ -58,6 +181,10 @@ contract OracleTest is Setup {
         _percentChange = uint16(bound(uint256(_percentChange), 10, MAX_BPS));
 
         mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        if (_amount > noYieldAmount) {
+            noBaseYield = true;
+        }
 
         uint256 _delta = (_amount * _percentChange) / MAX_BPS;
 

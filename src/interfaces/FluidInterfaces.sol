@@ -29,3 +29,16 @@ interface ILiquidtyResolver {
         view
         returns (FluidStructs.OverallTokenData memory overallTokenData_);
 }
+
+interface IDexResolver {
+    function getDexVariablesRaw(address dex_) external view returns (uint256);
+}
+
+interface IFluidDex {
+    function swapIn(
+        bool swap0to1_,
+        uint256 amountIn_,
+        uint256 amountOutMin_,
+        address to_
+    ) external returns (uint256);
+}
