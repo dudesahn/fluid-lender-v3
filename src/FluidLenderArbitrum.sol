@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
+import {IWETH} from "src/interfaces/IWETH.sol";
 import {IAuction} from "src/interfaces/IAuction.sol";
 import {IMerkleRewards} from "src/interfaces/FluidInterfaces.sol";
 import {IFluidDex} from "src/interfaces/FluidInterfaces.sol";
@@ -18,6 +19,9 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
 
     /// @notice True if strategy deposits are open to any address
     bool public openDeposits;
+
+    /// @notice Set this so we don't try and sell dust.
+    uint256 public minFluidToSell;
 
     /// @notice Mapping of addresses and whether they are allowed to deposit to this strategy
     mapping(address => bool) public allowed;
@@ -54,7 +58,9 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
 
         // Set the min amount for the swapper to sell, 0.05% for both USDC and USDT-WETH pools
         _setUniFees(base, address(asset), 500); // UniV3 fees in 1/100 of bps
-        minAmountToSell = 100e18; // 100 FLUID = 600 USD
+
+        // use a custom variable here since we only use UniV3 in our second step
+        minFluidToSell = 100e18; // 100 FLUID = 600 USD
     }
 
     /* ========== VIEW FUNCTIONS ========== */
@@ -111,7 +117,7 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
     function _claimAndSellRewards() internal override {
         // use Fluid DEX and UniV3 to sell FLUID to underlying
         uint256 balance = FLUID.balanceOf(address(this));
-        if (balance > minAmountToSell && !useAuction) {
+        if (balance > minFluidToSell && !useAuction) {
             _sellFluidToWeth(balance);
             balance = ERC20(base).balanceOf(address(this));
             _swapFrom(base, address(asset), balance, 0);
@@ -122,8 +128,23 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
         FLUID_DEX.swapIn(true, _fluidToSell, 0, address(this));
     }
 
+    function manualSwapWeth() external {
+        uint256 balance = ERC20(base).balanceOf(address(this));
+        _swapFrom(base, address(asset), balance, 0);
+    }
+
     /**
-     * @dev Kick an auction for a given token.
+     * @notice Handles native ETH received by the contract and automatically wraps to WETH
+     * @dev Fluid's DEX returns ETH, not WETH
+     */
+    receive() external payable {
+        if (address(this).balance != 0) {
+            IWETH(base).deposit{value: address(this).balance}();
+        }
+    }
+
+    /**
+     * @notice Kick an auction for a given token.
      * @param _token The token that is being sold.
      */
     function kickAuction(
@@ -145,14 +166,14 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
     /* ========== SETTERS ========== */
 
     /**
-     * @notice Set the minimum amount of rewardsToken to sell.
+     * @notice Set the minimum amount of FLUID to sell.
      * @dev Can only be called by management.
-     * @param _minAmountToSell minimum amount to sell in wei.
+     * @param _minFluidToSell minimum amount to sell in wei.
      */
-    function setMinAmountToSell(
-        uint256 _minAmountToSell
+    function setMinFluidToSell(
+        uint256 _minFluidToSell
     ) external onlyManagement {
-        minAmountToSell = _minAmountToSell;
+        minFluidToSell = _minFluidToSell;
     }
 
     /**
