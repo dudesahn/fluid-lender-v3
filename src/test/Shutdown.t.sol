@@ -8,18 +8,7 @@ contract ShutdownTest is Setup {
         super.setUp();
     }
 
-    function test_shutdown_max_util() public {
-        // Deposit into strategy
-        uint256 userDeposit = 100_000e6;
-        mintAndDepositIntoStrategy(strategy, user, userDeposit);
-        bool isMaxUtil = causeMaxUtil(userDeposit);
-        if (!isMaxUtil) {
-            console2.log("Skip test, not max util for this market");
-            return;
-        }
-    }
-
-    function test_shutdownCanWithdraw(uint256 _amount) public {
+    function test_shutdown_can_withdraw(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
@@ -39,26 +28,24 @@ contract ShutdownTest is Setup {
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
         );
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
-
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
+            uint256 daysToExpand;
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
                 uint256 toRedeem = strategy.maxRedeem(user);
@@ -74,12 +61,14 @@ contract ShutdownTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);
@@ -93,7 +82,7 @@ contract ShutdownTest is Setup {
         );
     }
 
-    function test_emergencyWithdraw_maxUint(uint256 _amount) public {
+    function test_emergency_withdraw_maxUint(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
@@ -111,32 +100,31 @@ contract ShutdownTest is Setup {
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // should be able to pass uint 256 max and not revert.
+        // a strategy must be shutdown in order to emergency withdraw
         vm.prank(emergencyAdmin);
         strategy.emergencyWithdraw(type(uint256).max);
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
         );
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
-
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
+            uint256 daysToExpand;
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
                 uint256 toRedeem = strategy.maxRedeem(user);
@@ -152,12 +140,14 @@ contract ShutdownTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);
@@ -169,6 +159,195 @@ contract ShutdownTest is Setup {
             balanceBefore + _amount,
             "!final balance"
         );
+    }
+
+    function test_shutdown_max_util_after_deposit() public {
+        // Deposit into strategy
+        uint256 _amount = 100_000 * 10 ** asset.decimals();
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+        bool isMaxUtil = causeMaxUtil(_amount);
+        if (!isMaxUtil) {
+            console2.log("Skip test, not max util for this market");
+            return;
+        }
+
+        // Earn Interest
+        skip(1 days);
+
+        // Shutdown the strategy
+        vm.prank(management);
+        strategy.shutdownStrategy();
+
+        // assets shouldn't have gone anywhere
+        assertEq(strategy.totalAssets(), _amount, "!totalAssets");
+
+        // balance of assets should be zero in strategy still
+        assertEq(strategy.balanceOfAsset(), 0, "!assets");
+
+        // value of vault should be positive
+        uint256 valueOfVault = strategy.valueOfVault();
+        assertGt(valueOfVault, 0, "!value");
+        console2.log("Value of vault tokens:", valueOfVault);
+
+        // management steps in to get funds out ASAP
+        vm.prank(management);
+        strategy.emergencyWithdraw(type(uint256).max);
+
+        // balance of assets should be greater than zero now
+        uint256 balanceOfAssets = strategy.balanceOfAsset();
+        console2.log("Balance of loose assets:", balanceOfAssets);
+        console2.log(
+            "Balance of loose vault token:",
+            strategy.balanceOfVault()
+        );
+        console2.log(
+            "Balance of staked vault tokens:",
+            strategy.balanceOfStake()
+        );
+
+        // Make sure we can still withdraw the full amount
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            console2.log("Can't withdraw all funds");
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            if (userToWithdraw > 0) {
+                vm.prank(user);
+                strategy.withdraw(userToWithdraw, user, user);
+            }
+
+            // there will likely be some amount to withdraw since we don't yoink all loose liquidity in Fluid
+
+            // check and make sure that our user still holds some amount of strategy tokens
+            // add extra multiplier by 1e18 to add precision
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / (1e18 * 10 ** asset.decimals());
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                (1e18 * 10 ** asset.decimals());
+            // these should be equal, but give 100 wei of wiggle room for rounding
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 100);
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+
+            assertEq(strategy.totalAssets(), 0, "!zero");
+
+            if (noBaseYield) {
+                assertGe(
+                    asset.balanceOf(user) + 1, // 1 wei loss for 4626 rounding
+                    balanceBefore + _amount,
+                    "!final balance"
+                );
+            } else {
+                assertGe(
+                    asset.balanceOf(user),
+                    balanceBefore + _amount,
+                    "!final balance"
+                );
+            }
+        }
+    }
+
+    // this one shouldn't be much different than normal
+    function test_shutdown_max_util_before_deposit() public {
+        // Deposit into strategy
+        uint256 _amount = 100_000 * 10 ** asset.decimals();
+        bool isMaxUtil = causeMaxUtil(_amount);
+        if (!isMaxUtil) {
+            console2.log("Skip test, not max util for this market");
+            return;
+        }
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // Earn Interest
+        skip(1 days);
+
+        // Shutdown the strategy
+        vm.prank(management);
+        strategy.shutdownStrategy();
+
+        // assets shouldn't have gone anywhere
+        assertEq(strategy.totalAssets(), _amount, "!totalAssets");
+
+        // balance of assets should be zero in strategy still
+        assertEq(strategy.balanceOfAsset(), 0, "!assets");
+
+        // value of vault should be positive
+        uint256 valueOfVault = strategy.valueOfVault();
+        assertGt(valueOfVault, 0, "!value");
+        console2.log("Value of vault tokens:", valueOfVault);
+
+        // management steps in to get funds out ASAP
+        vm.prank(management);
+        strategy.emergencyWithdraw(type(uint256).max);
+
+        // balance of assets should be greater than zero now
+        uint256 balanceOfAssets = strategy.balanceOfAsset();
+        console2.log("Balance of loose assets:", balanceOfAssets);
+        console2.log(
+            "Balance of loose vault token:",
+            strategy.balanceOfVault()
+        );
+        console2.log(
+            "Balance of staked vault tokens:",
+            strategy.balanceOfStake()
+        );
+
+        // Make sure we can still withdraw the full amount
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            console2.log("Can't withdraw all funds");
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            if (userToWithdraw > 0) {
+                vm.prank(user);
+                strategy.withdraw(userToWithdraw, user, user);
+            }
+
+            // there will likely be some amount to withdraw since we don't yoink all loose liquidity in Fluid
+
+            // check and make sure that our user still holds some amount of strategy tokens
+            // add extra multiplier by 1e18 to add precision
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / (1e18 * 10 ** asset.decimals());
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                (1e18 * 10 ** asset.decimals());
+            // these should be equal, but give 100 wei of wiggle room for rounding
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 100);
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+
+            assertEq(strategy.totalAssets(), 0, "!zero");
+
+            if (noBaseYield) {
+                assertGe(
+                    asset.balanceOf(user) + 1, // 1 wei loss for 4626 rounding
+                    balanceBefore + _amount,
+                    "!final balance"
+                );
+            } else {
+                assertGe(
+                    asset.balanceOf(user),
+                    balanceBefore + _amount,
+                    "!final balance"
+                );
+            }
+        }
     }
 
     // TODO: Add tests for any emergency function added.

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.28;
 
-import {FluidLenderL2} from "src/FluidLenderL2.sol";
+import {FluidLenderBase} from "src/FluidLenderBase.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
-contract FluidLenderFactoryL2 {
+contract FluidLenderFactoryBase {
     event NewFluidLender(address indexed strategy, address indexed asset);
 
     address public management;
@@ -25,6 +25,7 @@ contract FluidLenderFactoryL2 {
         performanceFeeRecipient = _peformanceFeeRecipient;
         keeper = _keeper;
         emergencyAdmin = _emergencyAdmin;
+        // FLUID_DEX = _fluidDex; address _fluidDex
     }
 
     modifier onlyManagement() {
@@ -47,7 +48,7 @@ contract FluidLenderFactoryL2 {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface newStrategy = IStrategyInterface(
-            address(new FluidLenderL2(_asset, _name, _vault))
+            address(new FluidLenderBase(_asset, _name, _vault))
         );
         newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
 

@@ -28,40 +28,52 @@ contract OperationTest is Setup {
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
+
+        // turn off health check if no yield since we may lose 1-2 wei from rounding
+        if (_amount > noYieldAmount) {
+            noBaseYield = true;
+        }
+        if (noBaseYield) {
+            vm.prank(management);
+            strategy.setDoHealthCheck(false);
+        }
 
         // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGe(profit, 0, "!profit");
-        assertEq(loss, 0, "!loss");
+        if (noBaseYield) {
+            assertGe(profit, 0, "!profit");
+            assertLe(loss, 2, "!loss");
+        } else {
+            assertGt(profit, 0, "!profit");
+            assertEq(loss, 0, "!loss");
+        }
 
         // skip time to unlock any profit we've earned
         skip(strategy.profitMaxUnlockTime());
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
         );
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
-
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
+            uint256 daysToExpand;
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
                 uint256 toRedeem = strategy.maxRedeem(user);
@@ -77,23 +89,33 @@ contract OperationTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);
             strategy.redeem(_amount, user, user);
         }
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noBaseYield) {
+            assertGe(
+                asset.balanceOf(user) + 2, // up to 2 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
     }
 
     function test_operation_fixed() public {
@@ -115,17 +137,49 @@ contract OperationTest is Setup {
             profit / 10 ** asset.decimals(),
             "* token decimals"
         );
-        uint256 apr = (100 * profit * 365 * 86400) /
+        uint256 apr = (profit * 365 * 86400 * 1e18) /
             (_amount * strategy.profitMaxUnlockTime());
-        console2.log("Estimated APR whole percentage:", apr);
+        console2.log("Estimated APR percentage (divide by 1e18):", apr);
+        console2.log(
+            "Estimated APR percentage (whole number):",
+            (apr * 100) / 1e18
+        );
 
         // Check return Values
-        assertGe(profit, 0, "!profit");
+        assertGt(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
         skip(strategy.profitMaxUnlockTime());
 
         uint256 balanceBefore = asset.balanceOf(user);
+
+        // log what our maxRedeem is
+        uint256 maxRedeem = strategy.maxRedeem(user);
+        console2.log("Max Redeem for user:", maxRedeem);
+
+        // airdrop some FLUID or WPOL to our strategy to simulate the merkle claim and to test selling rewards
+        simulateMerkleClaim();
+
+        // Report profit
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console2.log(
+            "Profit from report after merkle claim:",
+            profit / 10 ** asset.decimals(),
+            "* token decimals"
+        );
+        apr =
+            (profit * 365 * 86400 * 1e18) /
+            (_amount * strategy.profitMaxUnlockTime());
+        console2.log("Estimated APR percentage (divide by 1e18):", apr);
+        console2.log(
+            "Estimated APR percentage (whole number):",
+            (apr * 100) / 1e18
+        );
+
+        // Check return Values
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
 
         // Withdraw all funds
         vm.prank(user);
@@ -154,7 +208,7 @@ contract OperationTest is Setup {
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // confirm that our strategy is empty
         assertEq(asset.balanceOf(address(strategy)), 0, "!empty");
@@ -166,38 +220,45 @@ contract OperationTest is Setup {
         // confirm that we have our airdrop amount in our strategy loose
         assertEq(asset.balanceOf(address(strategy)), toAirdrop, "!airdrop");
 
+        // if we don't have base yield, we will still have profit, but it might lose a few wei compared to the airdrop
+        if (_amount > noYieldAmount) {
+            noBaseYield = true;
+        }
+
         // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGe(profit, toAirdrop, "!profit");
-        assertEq(loss, 0, "!loss");
+        if (noBaseYield) {
+            assertGe(profit + 2, toAirdrop, "!profit");
+            assertEq(loss, 0, "!loss");
+        } else {
+            assertGe(profit, toAirdrop, "!profit");
+            assertEq(loss, 0, "!loss");
+        }
 
         skip(strategy.profitMaxUnlockTime());
-
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
         );
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
-
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
+            uint256 daysToExpand;
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
                 uint256 toRedeem = strategy.maxRedeem(user);
@@ -213,23 +274,33 @@ contract OperationTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);
             strategy.redeem(_amount, user, user);
         }
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noBaseYield) {
+            assertGe(
+                asset.balanceOf(user) + 2, // up to 2 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
     }
 
     function test_profitableReport_withFees(
@@ -251,19 +322,29 @@ contract OperationTest is Setup {
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // TODO: implement logic to simulate earning interest.
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
+
+        // if we don't have base yield, we will still have profit, but it might lose a few wei compared to the airdrop
+        if (_amount > noYieldAmount) {
+            noBaseYield = true;
+        }
 
         // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGe(profit, toAirdrop, "!profit");
-        assertEq(loss, 0, "!loss");
+        if (noBaseYield) {
+            assertGe(profit + 2, toAirdrop, "!profit");
+            assertEq(loss, 0, "!loss");
+        } else {
+            assertGe(profit, toAirdrop, "!profit");
+            assertEq(loss, 0, "!loss");
+        }
 
         skip(strategy.profitMaxUnlockTime());
 
@@ -274,28 +355,26 @@ contract OperationTest is Setup {
 
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
-        );
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
+        );
 
         // pull this out since we use it in two while loops
         uint256 toRedeem;
+        uint256 daysToExpand;
 
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
@@ -312,34 +391,45 @@ contract OperationTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);
             strategy.redeem(_amount, user, user);
         }
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noBaseYield) {
+            assertGe(
+                asset.balanceOf(user) + 2, // up to 2 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
 
         // check that we are tracking our deposits correctly
-        stakedBalance = strategy.balanceOfStake();
+        totalVaultDeposits = strategy.valueOfVault();
+        daysToExpand = 0;
 
         // check that we can withdraw our full staked balance that we just deposited
         maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
 
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as performanceFeeRecipient holds strategy shares, we still need to redeem more
             while (strategy.balanceOf(performanceFeeRecipient) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
@@ -360,12 +450,14 @@ contract OperationTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(performanceFeeRecipient);
@@ -397,11 +489,20 @@ contract OperationTest is Setup {
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
-        // Skip some time
-        skip(1 days);
+        // Earn Interest
+        skip(strategy.profitMaxUnlockTime());
 
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
+
+        // turn off health check if no yield since we may lose 1-2 wei from rounding
+        if (_amount > noYieldAmount) {
+            noBaseYield = true;
+        }
+        if (noBaseYield) {
+            vm.prank(management);
+            strategy.setDoHealthCheck(false);
+        }
 
         vm.prank(keeper);
         strategy.report();
@@ -415,26 +516,24 @@ contract OperationTest is Setup {
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
-        // check that we are tracking our deposits correctly
-        uint256 stakedBalance = strategy.balanceOfStake();
-        uint256 strategyVaultBalance = strategy.balanceOfVault() +
-            stakedBalance;
-        assertEq(strategyVaultBalance, stakedBalance, "!staked");
-
-        // check that we can withdraw our full staked balance that we just deposited
+        // check that we can withdraw our full balance that we just deposited
+        uint256 totalVaultDeposits = strategy.valueOfVault();
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
-            fluidStaking
+            address(strategy)
         );
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(
-            0x52Aa899454998Be5b000Ad077a46Bbe360F4e497
+        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+
+        assertGe(
+            proxyBalance,
+            totalVaultDeposits,
+            "deposits missing from proxy"
         );
 
-        assertGe(proxyBalance, stakedBalance, "deposits missing from proxy");
-
         // realistically here we need to loop through withdrawing more and waiting for expansion of withdrawable amount
-        if (stakedBalance > maxRedeemForVault) {
+        if (totalVaultDeposits > maxRedeemForVault) {
             // as long as user holds strategy shares, we still need to redeem more
+            uint256 daysToExpand;
             while (strategy.balanceOf(user) > 0) {
                 // our strategy should accurately report how much we can redeem in one go
                 uint256 toRedeem = strategy.maxRedeem(user);
@@ -450,12 +549,14 @@ contract OperationTest is Setup {
 
                 // skip a day for expansion
                 skip(1 days);
+                daysToExpand += 1;
             }
+            console2.log("Number of days to expand:", daysToExpand);
         } else {
             assertGe(
                 maxRedeemForVault,
-                stakedBalance,
-                "can't redeem our staked balance"
+                totalVaultDeposits,
+                "can't redeem our full balance"
             );
             // Withdraw all funds
             vm.prank(user);

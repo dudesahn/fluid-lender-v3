@@ -13,6 +13,12 @@ contract FunctionSignatureTest is Setup {
     // no function signature collisions occurred from the custom functions.
     // Does not check functions that are strategy dependant and will be checked in other tests
     function test_functionCollisions() public {
+        // log our strategy asset and chain id, and our fuzz amounts
+        console2.log("Strategy asset:", asset.symbol());
+        console2.log("Chain ID:", block.chainid);
+        console2.log("Min fuzz amount:", minFuzzAmount);
+        console2.log("Max fuzz amount:", maxFuzzAmount);
+
         uint256 wad = 1e18;
         vm.expectRevert("initialized");
         strategy.initialize(
@@ -34,7 +40,7 @@ contract FunctionSignatureTest is Setup {
         assertEq(strategy.totalSupply(), 0, "total supply");
         assertEq(strategy.unlockedShares(), 0, "unlocked shares");
         assertEq(strategy.asset(), address(asset), "asset");
-        assertEq(strategy.apiVersion(), "3.0.3", "api");
+        assertEq(strategy.apiVersion(), "3.0.4", "api");
         assertEq(strategy.MAX_FEE(), 5_000, "max fee");
         assertEq(strategy.fullProfitUnlockDate(), 0, "unlock date");
         assertEq(strategy.profitUnlockingRate(), 0, "unlock rate");

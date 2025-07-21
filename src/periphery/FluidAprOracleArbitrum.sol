@@ -3,12 +3,11 @@ pragma solidity 0.8.28;
 
 import "src/periphery/FluidStructs.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
-import {ILendingResolver, ILiquidtyResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
-import {UniswapV3SwapSimulator, ISwapRouter} from "src/periphery/UniswapV3SwapSimulator.sol";
+import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
 
-contract FluidAprOracleMainnet {
+contract FluidAprOracleArbitrum {
     /// @notice Operator role can set rewardTokensPerSecond
     address public operator;
 
@@ -23,22 +22,25 @@ contract FluidAprOracleMainnet {
 
     /// @notice Fluid's lending resolver contract.
     ILendingResolver public constant LENDING_RESOLVER =
-        ILendingResolver(0xC215485C572365AE87f908ad35233EC2572A3BEC);
+        ILendingResolver(0xdF4d3272FfAE8036d9a2E1626Df2Db5863b4b302);
 
     /// @notice Fluid's liquidity resolver contract.
     ILiquidtyResolver public constant LIQUIDITY_RESOLVER =
-        ILiquidtyResolver(0xF82111c4354622AB12b9803cD3F6164FCE52e847);
+        ILiquidtyResolver(0x46859d33E662d4bF18eEED88f74C36256E606e44);
 
-    /// @notice Array of our fToken markets with bonus rewards
-    address[] public marketsWithRewards;
+    /// @notice Fluid's DEX resolver contract.
+    IDexResolver public constant DEX_RESOLVER =
+        IDexResolver(0x87B7E70D8F1FAcD3d154AF8559D632481724508E);
 
-    // internal state vars used for pricing FLUID
-    address constant UNISWAP_V3_ROUTER =
-        0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address constant FLUID = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
-    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    IChainlinkCalcs constant CHAINLINK_CALCS =
-        IChainlinkCalcs(0xc8D60D8273E69E63eAFc4EA342f96AD593A4ba10);
+    /// @notice Yearn's Chainlink calculation helper contract.
+    IChainlinkCalcs public constant CHAINLINK_CALCS =
+        IChainlinkCalcs(0x9d032763693D4eF989b630de2eCA8750BDe88219);
+
+    address public immutable FLUID_WETH_DEX =
+        0x2886a01a0645390872a9eb99dAe1283664b0c524;
+
+    address public immutable WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
+
     uint256 constant YEAR = 31536000;
 
     constructor(address _operator) {
@@ -71,7 +73,6 @@ contract FluidAprOracleMainnet {
     // should be able to actually post the details of the campaign directly to the APR oracle, and then calculate the ∆ from there. reached out to them about this
     // should actually be able to reverse-calculate the amount of FLUID rewards per period from the APR, price, and totalAssets (supply?); should check if USDC and USDT match amounts and across periods
     // can pull the data from here for tokens per second: https://merkle.api.fluid.instadapp.io/programs/inst-rewards-dec-2024/apr
-    // totalSupply is literally just the shares of fTokens (ie, the token's totalSupply)
 
     /**
      * @notice Will return the expected Apr of a strategy post a debt change.
@@ -101,7 +102,7 @@ contract FluidAprOracleMainnet {
         FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
             .getFTokenDetails(fToken);
         uint256 supplyRate = tokenDetails.supplyRate * 1e14;
-        uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4;
+        uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4; // this actually seems we should be multiplying be 1e4 instead of 1e14
 
         FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
             .getOverallTokenData(ERC4626(fToken).asset());
@@ -132,9 +133,9 @@ contract FluidAprOracleMainnet {
                 assets;
         }
 
-        uint256 fluidRewardRate;
         // check our mapping to see if we have any rewardsRates set
         // note that these calculations expect only stablecoins to have extra rewards
+        uint256 fluidRewardRate;
         if (rewards[fToken] != 0 || useManualRewardsApr) {
             if (useManualRewardsApr) {
                 fluidRewardRate = manualRewardsApr[fToken];
@@ -153,25 +154,6 @@ contract FluidAprOracleMainnet {
         }
 
         apr = supplyRate + assetRewardRate + fluidRewardRate;
-    }
-
-    function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
-        uint256 fluidInWeth = UniswapV3SwapSimulator.simulateExactInputSingle(
-            ISwapRouter(UNISWAP_V3_ROUTER),
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: FLUID,
-                tokenOut: WETH,
-                fee: 3000,
-                recipient: address(0),
-                deadline: block.timestamp,
-                amountIn: 1e18,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
-
-        // use chainlink to convert weth to USDC (6 decimals)
-        fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e18;
     }
 
     function getSupplyRate(
@@ -251,6 +233,20 @@ contract FluidAprOracleMainnet {
                     assets;
             }
         }
+    }
+
+    function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
+        // pull the price from the Fluid DEX
+        uint256 storageVar = DEX_RESOLVER.getDexVariablesRaw(FLUID_WETH_DEX);
+
+        /// Next 40 bits => 41-80 => last stored price of pool. BigNumber (32 bits precision, 8 bits exponent)
+        uint256 X40 = 0xffffffffff;
+        uint256 X8 = 0xff;
+        uint256 fluidInWeth = (storageVar >> 41) & X40;
+        fluidInWeth = (fluidInWeth >> 8) << (fluidInWeth & X8);
+
+        // use chainlink to convert weth to USDC (6 decimals)
+        fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e27;
     }
 
     function setRewardsRate(
