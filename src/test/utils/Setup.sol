@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {ExtendedTest} from "./ExtendedTest.sol";
+import {Test} from "forge-std/Test.sol";
 
 import {FluidLenderMainnet, ERC20, SafeERC20} from "src/FluidLenderMainnet.sol"; // make sure to use SafeERC20 for USDT
 import {FluidLenderFactoryMainnet} from "src/FluidLenderFactoryMainnet.sol";
@@ -33,7 +33,7 @@ interface IFluidLiquidityVault {
     ) external returns (uint256, int256, int256);
 }
 
-contract Setup is ExtendedTest, IEvents {
+contract Setup is Test, IEvents {
     using SafeERC20 for ERC20;
 
     // Contract instances that we will use repeatedly.
