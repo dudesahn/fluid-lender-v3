@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.28;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
@@ -12,6 +12,13 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
     /// @notice Address for our reward token auction
     address public auction;
 
+    /// @notice True if strategy deposits are open to any address
+    bool public openDeposits;
+
+    /// @notice Mapping of addresses and whether they are allowed to deposit to this strategy
+    mapping(address => bool) public allowed;
+
+    /// @notice Fluid WPOL rewards merkle claim contract
     IMerkleRewards public constant MERKLE_CLAIM =
         IMerkleRewards(0xF90D6eA5d0B4CAD69530543CA00eE6cab94B09f4);
 
@@ -20,7 +27,6 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         ERC20(0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270);
 
     /**
-     * @dev Vault must match lp_token() for the staking pool.
      * @param _asset Underlying asset to use for this strategy.
      * @param _name Name to use for this strategy.
      * @param _vault ERC4626 vault token to use.
@@ -35,7 +41,20 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         // Set the min amount for the swapper to sell
         // 0.05% pool for both USDC and USDT
         _setUniFees(address(WPOL), address(asset), 500); // UniV3 fees in 1/100 of bps
-        minAmountToSell = 1000e18; // 1000 POL = 200 USD
+        minAmountToSell = 1000e18; // 1000 POL = 250 USD
+    }
+
+    /* ========== VIEW FUNCTIONS ========== */
+
+    function availableDepositLimit(
+        address _receiver
+    ) public view override returns (uint256) {
+        if (openDeposits || allowed[_receiver]) {
+            // Return the max amount the vault will allow for deposits.
+            return vault.maxDeposit(address(this));
+        } else {
+            return 0;
+        }
     }
 
     /* ========== MUTATIVE FUNCTIONS ========== */
@@ -47,7 +66,7 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
 
     /**
      * @notice Claim rewards from the merkle distributor
-     * @dev Can only be called by management. All values should be pulled from Fluid's API.
+     * @dev All values should be pulled from Fluid's API.
      * @param _recipient Recipient of rewards, must be msg.sender.
      * @param _cumulativeAmount Total amount of rewards to claim.
      * @param _positionType Type that our Fluid position is (lending, vault, etc).
@@ -64,7 +83,7 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         uint256 _cycle,
         bytes32[] calldata _merkleProof,
         bytes memory _metadata
-    ) external onlyManagement {
+    ) external {
         MERKLE_CLAIM.claim(
             _recipient,
             _cumulativeAmount,
@@ -140,5 +159,27 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         uint256 _minAmountToSell
     ) external onlyManagement {
         minAmountToSell = _minAmountToSell;
+    }
+
+    /**
+     * @notice Set whether deposits are open to anyone or restricted to our allowed mapping.
+     * @dev Can only be called by management.
+     * @param _openDeposits Allow deposits from anyone (true) or use mapping (false).
+     */
+    function setOpenDeposits(bool _openDeposits) external onlyManagement {
+        openDeposits = _openDeposits;
+    }
+
+    /**
+     * @notice Set whether an address can deposit to the strategy or not.
+     * @dev Can only be called by management.
+     * @param _depositor Address to set mapping for.
+     * @param _allowed Whether the address is allowed to deposit to the strategy.
+     */
+    function setAllowed(
+        address _depositor,
+        bool _allowed
+    ) external onlyManagement {
+        allowed[_depositor] = _allowed;
     }
 }
