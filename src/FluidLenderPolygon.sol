@@ -38,6 +38,9 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
     ) Base4626Compounder(_asset, _name, _vault) {
         WPOL.forceApprove(router, type(uint256).max);
 
+        // update our base to use WPOL. UniV3 router is same address as mainnet.
+        base = address(WPOL);
+
         // Set the min amount for the swapper to sell
         // 0.05% pool for both USDC and USDT
         _setUniFees(address(WPOL), address(asset), 500); // UniV3 fees in 1/100 of bps
@@ -104,7 +107,7 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
     }
 
     /**
-     * @dev Kick an auction for a given token.
+     * @notice Kick an auction for a given token.
      * @param _token The token that is being sold.
      */
     function kickAuction(

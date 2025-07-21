@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {IWETH} from "src/interfaces/IWETH.sol";
 import {IAuction} from "src/interfaces/IAuction.sol";
 import {IMerkleRewards} from "src/interfaces/FluidInterfaces.sol";
 import {IFluidDex} from "src/interfaces/FluidInterfaces.sol";
@@ -146,6 +147,16 @@ contract FluidLenderBase is Base4626Compounder {
         FLUID_DEX.swapIn(true, _fluidToSell, 0, address(this));
     }
 
+    /**
+     * @notice Handles native ETH received by the contract and automatically wraps to WETH
+     * @dev Fluid's DEX returns ETH, not WETH
+     */
+    receive() external payable {
+        if (address(this).balance != 0) {
+            IWETH(address(WETH)).deposit{value: address(this).balance}();
+        }
+    }
+
     function _sellWethToAsset() internal {
         uint256 wethBalance = WETH.balanceOf(address(this));
 
@@ -170,7 +181,7 @@ contract FluidLenderBase is Base4626Compounder {
     }
 
     /**
-     * @dev Kick an auction for a given token.
+     * @notice Kick an auction for a given token.
      * @param _token The token that is being sold.
      */
     function kickAuction(

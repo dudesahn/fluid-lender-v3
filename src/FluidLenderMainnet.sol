@@ -113,7 +113,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
     }
 
     /**
-     * @dev Kick an auction for a given token.
+     * @notice Kick an auction for a given token.
      * @param _token The token that is being sold.
      */
     function kickAuction(

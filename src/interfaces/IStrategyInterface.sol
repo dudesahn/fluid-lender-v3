@@ -59,6 +59,13 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      * @dev Can only be called by management.
      * @param _minAmountToSell minimum amount to sell in wei
      */
+    function setMinFluidToSell(uint256 _minAmountToSell) external;
+
+    /**
+     * @notice Set the minimum amount of reward token to sell
+     * @dev Can only be called by management.
+     * @param _minAmountToSell minimum amount to sell in wei
+     */
     function setMinAmountToSell(uint256 _minAmountToSell) external;
 
     function openDeposits() external view returns (bool);
