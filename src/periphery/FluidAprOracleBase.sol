@@ -104,8 +104,17 @@ contract FluidAprOracleBase {
         uint256 supplyRate = tokenDetails.supplyRate * 1e14;
         uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4; // this actually seems we should be multiplying be 1e4 instead of 1e14
 
-        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
-            .getOverallTokenData(ERC4626(fToken).asset());
+        FluidStructs.OverallTokenData memory tokenData;
+        // make a special case for WETH
+        if (ERC4626(fToken).asset() == WETH) {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+            );
+        } else {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                ERC4626(fToken).asset()
+            );
+        }
 
         // calculate what our new assets will be
         uint256 assets = tokenDetails.totalAssets;
@@ -150,6 +159,13 @@ contract FluidAprOracleBase {
                         YEAR *
                         decimalsAdjustment) /
                     assets;
+                if (fToken == 0x1943FA26360f038230442525Cf1B9125b5DCB401) {
+                    // fetch our EURC price from chainlink
+                    uint256 eurcPrice = CHAINLINK_CALCS.getPriceUsdc(
+                        ERC4626(fToken).asset()
+                    );
+                    fluidRewardRate = (fluidRewardRate * eurcPrice) / 1e6;
+                }
             }
         }
 
@@ -166,8 +182,17 @@ contract FluidAprOracleBase {
             .getFTokenDetails(fToken);
         supplyRate = tokenDetails.supplyRate * 1e14;
 
-        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
-            .getOverallTokenData(ERC4626(fToken).asset());
+        FluidStructs.OverallTokenData memory tokenData;
+        // make a special case for WETH
+        if (ERC4626(fToken).asset() == WETH) {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+            );
+        } else {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                ERC4626(fToken).asset()
+            );
+        }
 
         // calculate what our new assets will be
         uint256 supply = tokenData.totalSupply - tokenData.supplyInterestFree;
@@ -231,6 +256,13 @@ contract FluidAprOracleBase {
                         YEAR *
                         decimalsAdjustment) /
                     assets;
+                if (fToken == 0x1943FA26360f038230442525Cf1B9125b5DCB401) {
+                    // fetch our EURC price from chainlink
+                    uint256 eurcPrice = CHAINLINK_CALCS.getPriceUsdc(
+                        ERC4626(fToken).asset()
+                    );
+                    fluidRewardRate = (fluidRewardRate * eurcPrice) / 1e6;
+                }
             }
         }
     }
@@ -280,4 +312,6 @@ contract FluidAprOracleBase {
         require(msg.sender == operator, "!operator");
         useManualRewardsApr = _useManualRewardsApr;
     }
+
+    // NEED TO CONVERT FLUID PRICE FROM USD TO EURO, SHOULD BE EASY USING CHAINLINK FEED
 }

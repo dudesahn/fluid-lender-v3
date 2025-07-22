@@ -104,8 +104,17 @@ contract FluidAprOracleArbitrum {
         uint256 supplyRate = tokenDetails.supplyRate * 1e14;
         uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4; // this actually seems we should be multiplying be 1e4 instead of 1e14
 
-        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
-            .getOverallTokenData(ERC4626(fToken).asset());
+        FluidStructs.OverallTokenData memory tokenData;
+        // make a special case for WETH
+        if (ERC4626(fToken).asset() == WETH) {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+            );
+        } else {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                ERC4626(fToken).asset()
+            );
+        }
 
         // calculate what our new assets will be
         uint256 assets = tokenDetails.totalAssets;
@@ -166,8 +175,17 @@ contract FluidAprOracleArbitrum {
             .getFTokenDetails(fToken);
         supplyRate = tokenDetails.supplyRate * 1e14;
 
-        FluidStructs.OverallTokenData memory tokenData = LIQUIDITY_RESOLVER
-            .getOverallTokenData(ERC4626(fToken).asset());
+        FluidStructs.OverallTokenData memory tokenData;
+        // make a special case for WETH
+        if (ERC4626(fToken).asset() == WETH) {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+            );
+        } else {
+            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
+                ERC4626(fToken).asset()
+            );
+        }
 
         // calculate what our new assets will be
         uint256 supply = tokenData.totalSupply - tokenData.supplyInterestFree;
