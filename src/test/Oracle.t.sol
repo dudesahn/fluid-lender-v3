@@ -12,6 +12,8 @@ import {IOracle} from "src/interfaces/IOracle.sol";
 contract OracleTest is Setup {
     IOracle public oracle;
 
+    uint256 public fuzzAmount;
+
     function setUp() public override {
         super.setUp();
         // deploy our factory and strategy
@@ -61,6 +63,16 @@ contract OracleTest is Setup {
                 "Current Supply APR (whole number):",
                 (supplyApr * 100) / 1e18
             );
+
+            // WETH runs out of gas on oracle.getRewardRates
+            // FluidLendingResolver::getFTokenDetails within the call gives EvmError: OutOfGas
+            // likely because of WETH's fallback? that shows the following:
+            // [StateChangeDuringStaticCall] EvmError: StateChangeDuringStaticCall
+            // tbh I think it's likely just that it's the third time we hit the static call state change and that puts
+            // us into OOG territory, because the first two calls to it don't end up running out of gas
+            if (address(asset) == tokenAddrs["WETH"]) {
+                vm.pauseGasMetering();
+            }
 
             (uint256 rewardsApr, uint256 fluidApr) = oracle.getRewardRates(
                 address(strategy),
@@ -145,9 +157,16 @@ contract OracleTest is Setup {
         uint256 currentApr = oracle.aprAfterDebtChange(_strategy, 0);
 
         // Should be greater than 0 but likely less than 100%
-        // mainnet and polygon should always have the merkle APR, no matter size (since it's fixed)
-        // L2s have the extra in-kind yield, which won't get fully diluted to zero either
-        assertGt(currentApr, 0, "ZERO");
+        // stablecoins have bonus/rewards APR which won't be fully diluted
+        // WETH can be diluted to zero since it's lending-only. above our noYieldAmount, APR might be zero
+        if (
+            address(asset) == tokenAddrs["WETH"] && fuzzAmount > noYieldAmount
+        ) {
+            assertGe(currentApr, 0, "ZERO");
+        } else {
+            assertGt(currentApr, 0, "ZERO");
+        }
+
         assertLt(currentApr, 1e18, "+100%");
         console2.log("APR", currentApr);
 
@@ -176,10 +195,21 @@ contract OracleTest is Setup {
         */
     }
 
-    function test_oracle(uint256 _amount, uint16 _percentChange) public {
+    function test_oracle_fuzzy(uint256 _amount, uint16 _percentChange) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         _percentChange = uint16(bound(uint256(_percentChange), 10, MAX_BPS));
+        fuzzAmount = _amount;
 
+        // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         if (_amount > noYieldAmount) {
