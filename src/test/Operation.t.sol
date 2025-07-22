@@ -24,6 +24,15 @@ contract OperationTest is Setup {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
@@ -61,8 +70,20 @@ contract OperationTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,
@@ -119,9 +140,22 @@ contract OperationTest is Setup {
     }
 
     function test_operation_fixed() public {
+        // use ~$1M
         uint256 _amount = 1_000_000 * 10 ** asset.decimals();
+        if (address(asset) == tokenAddrs["WETH"]) {
+            _amount = 275 * (10 ** asset.decimals());
+        }
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
@@ -162,14 +196,14 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (uint256 profitTwo, uint256 lossTwo) = strategy.report();
         console2.log(
             "Profit from report after merkle claim:",
-            profit / 10 ** asset.decimals(),
+            profitTwo / 10 ** asset.decimals(),
             "* token decimals"
         );
         apr =
-            (profit * 365 * 86400 * 1e18) /
+            (profitTwo * 365 * 86400 * 1e18) /
             (_amount * strategy.profitMaxUnlockTime());
         console2.log("Estimated APR percentage (divide by 1e18):", apr);
         console2.log(
@@ -178,8 +212,13 @@ contract OperationTest is Setup {
         );
 
         // Check return Values
-        assertGt(profit, 0, "!profit");
-        assertEq(loss, 0, "!loss");
+        assertGt(profitTwo, 0, "!profit");
+        assertEq(lossTwo, 0, "!loss");
+
+        // our profits should be higher with the merkle claim, assuming we have extra rewards
+        if (extraRewardRate > 0 || manualRewardApr > 0) {
+            assertGt(profitTwo, profit, "!profitTwo");
+        }
 
         // Withdraw all funds
         vm.prank(user);
@@ -203,6 +242,15 @@ contract OperationTest is Setup {
         _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_950));
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
@@ -246,8 +294,20 @@ contract OperationTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,
@@ -317,6 +377,15 @@ contract OperationTest is Setup {
         setFees(0, 1_000);
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
@@ -360,8 +429,20 @@ contract OperationTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,
@@ -484,6 +565,15 @@ contract OperationTest is Setup {
         assertTrue(!trigger);
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         (trigger, ) = strategy.tendTrigger();
@@ -521,8 +611,20 @@ contract OperationTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,

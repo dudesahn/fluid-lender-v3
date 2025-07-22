@@ -12,12 +12,21 @@ contract ShutdownTest is Setup {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // Shutdown the strategy
         vm.prank(emergencyAdmin);
@@ -33,8 +42,20 @@ contract ShutdownTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,
@@ -82,16 +103,25 @@ contract ShutdownTest is Setup {
         );
     }
 
-    function test_emergency_withdraw_maxUint(uint256 _amount) public {
+    function test_shutdown_emergency_withdraw_max_uint(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], _amount);
+        }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // Shutdown the strategy
         vm.prank(emergencyAdmin);
@@ -112,8 +142,20 @@ contract ShutdownTest is Setup {
         uint256 maxRedeemForVault = IStrategyInterface(fluidVault).maxRedeem(
             address(strategy)
         );
+
         // check balance of fluid liquidity proxy (this is where our deposited funds flow)
-        uint256 proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        // WETH converted to ether on chains where it's native
+        uint256 proxyBalance;
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            proxyBalance = fluidLiquidityProxy.balance;
+        } else {
+            proxyBalance = asset.balanceOf(fluidLiquidityProxy);
+        }
 
         assertGe(
             proxyBalance,
@@ -172,7 +214,7 @@ contract ShutdownTest is Setup {
         }
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // Shutdown the strategy
         vm.prank(management);
@@ -267,7 +309,7 @@ contract ShutdownTest is Setup {
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         // Earn Interest
-        skip(1 days);
+        skip(strategy.profitMaxUnlockTime());
 
         // Shutdown the strategy
         vm.prank(management);

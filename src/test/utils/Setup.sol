@@ -91,12 +91,18 @@ contract Setup is Test, IEvents {
         _setTokenAddrs();
 
         // Set asset. This is all we should have to adjust, along with using a different network in our makefile
-        asset = ERC20(tokenAddrs["USDC"]);
+        asset = ERC20(tokenAddrs["WETH"]);
 
         // setup our fuzz amounts
         maxFuzzAmount = 1e12 * (10 ** asset.decimals());
         minFuzzAmount = (10 ** asset.decimals()) / 100;
-        noYieldAmount = 1e9 * (10 ** asset.decimals());
+
+        // set ~$1B as no yield amount
+        if (address(asset) == tokenAddrs["WETH"]) {
+            noYieldAmount = 275_000 * (10 ** asset.decimals());
+        } else {
+            noYieldAmount = 1e9 * (10 ** asset.decimals());
+        }
 
         // adjust asset here ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️ ⬆️️️️️️️️️️
 
@@ -407,7 +413,7 @@ contract Setup is Test, IEvents {
         uint256 _totalAssets,
         uint256 _totalDebt,
         uint256 _totalIdle
-    ) public {
+    ) public view {
         uint256 _assets = _strategy.totalAssets();
         uint256 _balance = ERC20(_strategy.asset()).balanceOf(
             address(_strategy)
