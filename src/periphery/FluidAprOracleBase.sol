@@ -164,7 +164,7 @@ contract FluidAprOracleBase {
                     uint256 eurcPrice = CHAINLINK_CALCS.getPriceUsdc(
                         ERC4626(fToken).asset()
                     );
-                    fluidRewardRate = (fluidRewardRate * eurcPrice) / 1e6;
+                    fluidRewardRate = (fluidRewardRate * 1e6) / eurcPrice;
                 }
             }
         }
@@ -261,7 +261,7 @@ contract FluidAprOracleBase {
                     uint256 eurcPrice = CHAINLINK_CALCS.getPriceUsdc(
                         ERC4626(fToken).asset()
                     );
-                    fluidRewardRate = (fluidRewardRate * eurcPrice) / 1e6;
+                    fluidRewardRate = (fluidRewardRate * 1e6) / eurcPrice;
                 }
             }
         }
