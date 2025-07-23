@@ -137,7 +137,10 @@ contract FluidAprOraclePolygon {
                 uint256 decimalsAdjustment = 10 **
                     (ERC4626(fToken).decimals() - 6);
                 polRewardRate =
-                    (polPriceUSDC * rewards[fToken] * YEAR) /
+                    (polPriceUSDC *
+                        rewards[fToken] *
+                        YEAR *
+                        decimalsAdjustment) /
                     assets;
             }
         }
