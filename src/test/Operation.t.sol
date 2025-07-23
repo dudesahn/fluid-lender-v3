@@ -39,10 +39,13 @@ contract OperationTest is Setup {
         // Earn Interest
         skip(strategy.profitMaxUnlockTime());
 
-        // turn off health check if no yield since we may lose 1-2 wei from rounding
-        if (_amount > noYieldAmount) {
+        // we may not generate yield if the deposit is too large (crush borrow APR to 0), or very tiny (base yield not
+        //  1 whole wei of interest earned yet)
+        if (_amount > noYieldAmount || _amount < 1e5) {
             noBaseYield = true;
         }
+
+        // turn off health check if no yield since we may lose 1-2 wei from rounding
         if (noBaseYield) {
             vm.prank(management);
             strategy.setDoHealthCheck(false);
@@ -192,7 +195,10 @@ contract OperationTest is Setup {
         console2.log("Max Redeem for user:", maxRedeem);
 
         // airdrop some FLUID or WPOL to our strategy to simulate the merkle claim and to test selling rewards
-        simulateMerkleClaim();
+        // only do this if we have merkle rewards
+        if (extraRewardRate > 0 || manualRewardApr > 0) {
+            simulateMerkleClaim();
+        }
 
         // Report profit
         vm.prank(keeper);
