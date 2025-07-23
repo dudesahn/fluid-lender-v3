@@ -75,6 +75,7 @@ contract Setup is Test, IEvents {
     // do these based on the decimals
     uint256 public maxFuzzAmount; // 1e30 for 1e18 coin == 1e18 for 1e6 coin. 1e15 = 1B USDC.
     uint256 public minFuzzAmount;
+    uint256 public ORACLE_FUZZ_MIN;
 
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;
@@ -91,15 +92,28 @@ contract Setup is Test, IEvents {
         _setTokenAddrs();
 
         // Set asset. This is all we should have to adjust, along with using a different network in our makefile
-        asset = ERC20(tokenAddrs["WETH"]);
+        asset = ERC20(tokenAddrs["USDC"]);
+
+        // consider adding GHO to test auctions with
 
         // setup our fuzz amounts
         maxFuzzAmount = 1e12 * (10 ** asset.decimals());
         minFuzzAmount = (10 ** asset.decimals()) / 100;
 
         // set ~$1B as no yield amount
+        // EURC hits it lower than other assets since no one wants to borrow :(
         if (address(asset) == tokenAddrs["WETH"]) {
-            noYieldAmount = 275_000 * (10 ** asset.decimals());
+            // mainnet has better yields so can tolerate more dilution
+            if (block.chainid == 1) {
+                noYieldAmount = 250_000 * (10 ** asset.decimals());
+            } else if (block.chainid == 137) {
+                // smaller size as L2s with similarly poor yield on polygon
+                noYieldAmount = 15_000 * (10 ** asset.decimals());
+            } else {
+                noYieldAmount = 25_000 * (10 ** asset.decimals());
+            }
+        } else if (address(asset) == tokenAddrs["EURC"]) {
+            noYieldAmount = 1e8 * (10 ** asset.decimals());
         } else {
             noYieldAmount = 1e9 * (10 ** asset.decimals());
         }
@@ -437,7 +451,13 @@ contract Setup is Test, IEvents {
 
     function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
         uint256 balanceBefore = _asset.balanceOf(_to);
-        deal(address(_asset), _to, balanceBefore + _amount);
+        // if doing on arbitrum, let's deal with increasing total supply
+        if (block.chainid == 42161) {
+            // use the last argument to increase the totalSupply for burning WETH on arbitrum
+            deal(address(_asset), _to, balanceBefore + _amount, true);
+        } else {
+            deal(address(_asset), _to, balanceBefore + _amount);
+        }
     }
 
     function setFees(uint16 _protocolFee, uint16 _performanceFee) public {

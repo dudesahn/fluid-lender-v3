@@ -127,6 +127,10 @@ contract OracleTest is Setup {
                 (supplyApr * 100) / 1e18
             );
 
+            if (address(asset) == tokenAddrs["WETH"]) {
+                vm.pauseGasMetering();
+            }
+
             (uint256 rewardsApr, uint256 fluidApr) = oracle.getRewardRates(
                 address(strategy),
                 0
@@ -148,12 +152,7 @@ contract OracleTest is Setup {
         }
     }
 
-    // NOTE: need to setup the manual merkle reward amounts on the oracles for these tests after deployment...
-
     function checkOracle(address _strategy, uint256 _delta) public {
-        // Check set up
-        // TODO: Add checks for the setup
-
         uint256 currentApr = oracle.aprAfterDebtChange(_strategy, 0);
 
         // Should be greater than 0 but likely less than 100%
@@ -168,31 +167,40 @@ contract OracleTest is Setup {
         }
 
         assertLt(currentApr, 1e18, "+100%");
-        console2.log("APR", currentApr);
 
-        // TODO: Uncomment to test the apr goes up and down based on debt changes
-        /**
-        uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(_strategy, -int256(_delta));
+        uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(
+            _strategy,
+            -int256(_delta)
+        );
 
         // The apr should go up if deposits go down
-        assertLt(currentApr, negativeDebtChangeApr, "negative change");
+        if (
+            fuzzAmount > noYieldAmount && address(asset) == tokenAddrs["WETH"]
+        ) {
+            // WETH can more easily get diluted to zero total yield since it has only supply APR
+            assertLe(currentApr, negativeDebtChangeApr, "negative change");
+        } else {
+            assertLt(currentApr, negativeDebtChangeApr, "negative change");
+        }
 
-        uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
+        if (address(asset) == tokenAddrs["WETH"]) {
+            vm.pauseGasMetering();
+        }
 
-        assertGt(currentApr, positiveDebtChangeApr, "positive change");
-        */
+        uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(
+            _strategy,
+            int256(_delta)
+        );
 
-        // TODO: Uncomment if there are setter functions to test.
-        /**
-        vm.expectRevert("!governance");
-        vm.prank(user);
-        oracle.setterFunction(setterVariable);
-
-        vm.prank(management);
-        oracle.setterFunction(setterVariable);
-
-        assertEq(oracle.setterVariable(), setterVariable);
-        */
+        // The apr should go down if deposits go up
+        if (
+            fuzzAmount > noYieldAmount && address(asset) == tokenAddrs["WETH"]
+        ) {
+            // WETH can more easily get diluted to zero total yield since it has only supply APR
+            assertGe(currentApr, positiveDebtChangeApr, "positive change");
+        } else {
+            assertGt(currentApr, positiveDebtChangeApr, "positive change");
+        }
     }
 
     function test_oracle_fuzzy(uint256 _amount, uint16 _percentChange) public {
@@ -212,14 +220,8 @@ contract OracleTest is Setup {
         }
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        if (_amount > noYieldAmount) {
-            noBaseYield = true;
-        }
-
         uint256 _delta = (_amount * _percentChange) / MAX_BPS;
 
         checkOracle(address(strategy), _delta);
     }
-
-    // TODO: Deploy multiple strategies with different tokens as `asset` to test against the oracle.
 }
