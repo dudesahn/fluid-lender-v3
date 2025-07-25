@@ -2,11 +2,11 @@
 pragma solidity 0.8.28;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Auction} from "@periphery/Auctions/Auction.sol";
+import {ISwapRouter} from "@slipstream/periphery/interfaces/ISwapRouter.sol";
 import {IWETH} from "src/interfaces/IWETH.sol";
-import {IAuction} from "src/interfaces/IAuction.sol";
 import {IMerkleRewards} from "src/interfaces/FluidInterfaces.sol";
 import {IFluidDex} from "src/interfaces/FluidInterfaces.sol";
-import {ISwapRouter} from "@slipstream/periphery/interfaces/ISwapRouter.sol";
 
 contract FluidLenderBase is Base4626Compounder {
     using SafeERC20 for ERC20;
@@ -81,9 +81,15 @@ contract FluidLenderBase is Base4626Compounder {
             USDC.forceApprove(address(SLIPSTREAM_ROUTER), type(uint256).max);
             usdcToAssetSwapTickSpacing = 50;
         }
+
+        minAmountToSell = 100e18; // 100 FLUID = 600 USD
     }
 
     /* ========== VIEW FUNCTIONS ========== */
+
+    function balanceOfRewards() public view returns (uint256) {
+        return FLUID.balanceOf(address(this));
+    }
 
     function availableDepositLimit(
         address _receiver
@@ -136,10 +142,17 @@ contract FluidLenderBase is Base4626Compounder {
 
     function _claimAndSellRewards() internal override {
         // use Fluid DEX and Aerodrome to sell FLUID to underlying
-        uint256 balance = FLUID.balanceOf(address(this));
+        uint256 balance = balanceOfRewards();
         if (balance > minAmountToSell && !useAuction) {
             _sellFluidToWeth(balance);
             _sellWethToAsset();
+        }
+        balance = balanceOfAsset();
+        if (!TokenizedStrategy.isShutdown()) {
+            // no need to waste gas on depositing dust
+            if (balance > 1_000) {
+                _deployFunds(balance);
+            }
         }
     }
 
@@ -197,7 +210,7 @@ contract FluidLenderBase is Base4626Compounder {
         );
         uint256 _balance = ERC20(_from).balanceOf(address(this));
         ERC20(_from).safeTransfer(auction, _balance);
-        return IAuction(auction).kick(_from);
+        return Auction(auction).kick(_from);
     }
 
     /**
@@ -245,9 +258,13 @@ contract FluidLenderBase is Base4626Compounder {
      */
     function setAuction(address _auction) external onlyManagement {
         if (_auction != address(0)) {
-            require(IAuction(_auction).want() == address(asset), "wrong want");
             require(
-                IAuction(_auction).receiver() == address(this),
+                Auction(_auction).want() == address(asset) ||
+                    Auction(_auction).want() == address(vault),
+                "wrong want"
+            );
+            require(
+                Auction(_auction).receiver() == address(this),
                 "wrong receiver"
             );
         }

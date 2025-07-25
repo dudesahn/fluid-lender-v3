@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.28;
 
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
 import {IUniswapV3Swapper} from "@periphery/swappers/interfaces/IUniswapV3Swapper.sol";
@@ -37,7 +37,7 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      * @dev Can only be called by management.
      * @param _polToAsset UniV3 swap fee for WPOL => asset
      */
-    function setUniFees(uint24 _polToAsset) external;
+    function setUniV3Fees(uint24 _polToAsset) external;
 
     /**
      * @notice Set fees for Uniswap V3
@@ -45,7 +45,7 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      * @param _fluidToBase UniV3 swap fee for FLUID => base (WETH)
      * @param _baseToAsset UniV3 swap fee for base => asset
      */
-    function setUniFees(uint24 _fluidToBase, uint24 _baseToAsset) external;
+    function setUniV3Fees(uint24 _fluidToBase, uint24 _baseToAsset) external;
 
     /**
      * @notice Use to update our auction address.
@@ -68,11 +68,29 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      */
     function setMinAmountToSell(uint256 _minAmountToSell) external;
 
-    function openDeposits() external view returns (bool);
-
     function allowed(address _depositor) external view returns (bool);
 
     function setOpenDeposits(bool _openDeposits) external;
 
     function setAllowed(address _depositor, bool _allowed) external;
+
+    function balanceOfRewards() external view returns (uint256);
+
+    function FLUID() external view returns (address);
+
+    function WPOL() external view returns (address);
+
+    function auction() external view returns (address);
+
+    function claimRewards() external;
+
+    function minAmountToSell() external view returns (uint256);
+
+    function minFluidToSell() external view returns (uint256);
+
+    function openDeposits() external view returns (bool);
+
+    function setUseAuction(bool _useAuction) external;
+
+    function manualRewardSell() external;
 }

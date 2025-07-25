@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import "src/periphery/FluidStructs.sol";
+import {FluidStructs} from "src/libraries/FluidStructs.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {ILendingResolver, ILiquidtyResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
-import {UniswapV3SwapSimulator, ISwapRouter} from "src/periphery/UniswapV3SwapSimulator.sol";
+import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSimulator.sol";
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
 
 contract FluidAprOracleMainnet {
@@ -33,15 +33,16 @@ contract FluidAprOracleMainnet {
     address[] public marketsWithRewards;
 
     // internal state vars used for pricing FLUID
-    address constant UNISWAP_V3_ROUTER =
+    address public constant UNISWAP_V3_ROUTER =
         0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address constant FLUID = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
-    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    IChainlinkCalcs constant CHAINLINK_CALCS =
+    address public constant FLUID = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    IChainlinkCalcs public constant CHAINLINK_CALCS =
         IChainlinkCalcs(0xc8D60D8273E69E63eAFc4EA342f96AD593A4ba10);
-    uint256 constant YEAR = 31536000;
+    uint256 public constant YEAR = 31536000;
 
     constructor(address _operator) {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 

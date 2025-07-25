@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.28;
 
-import "src/periphery/FluidStructs.sol";
+import {FluidStructs} from "src/libraries/FluidStructs.sol";
 
 interface IMerkleRewards {
     function claim(

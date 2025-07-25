@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import "src/periphery/FluidStructs.sol";
+import {FluidStructs} from "src/libraries/FluidStructs.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
 import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/FluidInterfaces.sol";
@@ -44,6 +44,7 @@ contract FluidAprOracleBase {
     uint256 constant YEAR = 31536000;
 
     constructor(address _operator) {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 

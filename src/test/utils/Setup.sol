@@ -4,13 +4,14 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {FluidLenderMainnet, ERC20, SafeERC20} from "src/FluidLenderMainnet.sol"; // make sure to use SafeERC20 for USDT
+import {FluidLenderMainnet, ERC20, SafeERC20, Auction} from "src/FluidLenderMainnet.sol";
 import {FluidLenderFactoryMainnet} from "src/FluidLenderFactoryMainnet.sol";
 import {FluidLenderFactoryBase} from "src/FluidLenderFactoryBase.sol";
 import {FluidLenderFactoryArbitrum} from "src/FluidLenderFactoryArbitrum.sol";
 import {FluidLenderFactoryPolygon} from "src/FluidLenderFactoryPolygon.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 import {IStrategyFactoryInterface} from "src/interfaces/IStrategyFactoryInterface.sol";
+import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -44,8 +45,13 @@ contract Setup is Test, IEvents {
 
     mapping(string => address) public tokenAddrs;
 
+    // auction to be used by our strategy
+    Auction public auction;
+    AuctionFactory public auctionFactory =
+        AuctionFactory(0xCfA510188884F199fcC6e750764FAAbE6e56ec40); // same address on all chains
+
     // Addresses for different roles we will use repeatedly.
-    address public user = address(6969);
+    address public user = address(10);
     address public keeper = address(4);
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
@@ -291,6 +297,13 @@ contract Setup is Test, IEvents {
         strategy.setOpenDeposits(true);
         vm.stopPrank();
 
+        // setup our auction with our rewards token to sell
+        if (block.chainid == 137) {
+            setUpAuction(strategy.WPOL(), address(asset), address(strategy));
+        } else {
+            setUpAuction(strategy.FLUID(), address(asset), address(strategy));
+        }
+
         factory = strategy.FACTORY();
 
         // label all the used addresses for traces
@@ -400,6 +413,72 @@ contract Setup is Test, IEvents {
         // skip polygon and mainnet because there's not enough immediately borrowable stables in the major markets to push to max util
     }
 
+    function setUpAuction(
+        address _token,
+        address _want,
+        address _receiver
+    ) public {
+        // deploy auction for the strategy
+        auction = Auction(
+            auctionFactory.createNewAuction(_want, _receiver, management)
+        );
+
+        // enable reward token on our auction
+        vm.prank(management);
+        auction.enable(_token);
+    }
+
+    function simulateAuction(uint256 _profitAmount) public {
+        // cache our rewards token
+        address rewardsToken;
+        if (block.chainid == 137) {
+            rewardsToken = strategy.WPOL();
+        } else {
+            rewardsToken = strategy.FLUID();
+        }
+
+        // kick the auction
+        vm.prank(keeper);
+        strategy.kickAuction(rewardsToken);
+
+        // check for reward token balance in auction
+        uint256 rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(
+            address(auction)
+        );
+        console2.log(
+            "Reward token sitting in our strategy",
+            strategyBalance / 1e18,
+            "* 1e18"
+        );
+
+        // if we have reward tokens, sweep it out, and send back our designated profitAmount
+        if (rewardBalance > 0) {
+            console2.log(
+                "Reward token sitting in our auction",
+                rewardBalance / 1e18,
+                "* 1e18"
+            );
+
+            vm.prank(address(auction));
+            ERC20(rewardsToken).transfer(user, rewardBalance);
+            airdrop(asset, address(strategy), _profitAmount);
+            rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        }
+
+        // confirm that we swept everything out
+        assertEq(rewardBalance, 0, "!rewardBalance");
+    }
+
+    function simulateMerkleClaim() public {
+        // aim for roughly 5% APR on $1M, so ~$1300 from rewards in 10 days
+        if (block.chainid == 137) {
+            deal(merkleRewardToken, address(strategy), 5_000e18);
+        } else {
+            deal(merkleRewardToken, address(strategy), 200e18);
+        }
+    }
+
     function depositIntoStrategy(
         IStrategyInterface _strategy,
         address _user,
@@ -427,7 +506,7 @@ contract Setup is Test, IEvents {
         uint256 _totalAssets,
         uint256 _totalDebt,
         uint256 _totalIdle
-    ) public view {
+    ) public {
         uint256 _assets = _strategy.totalAssets();
         uint256 _balance = ERC20(_strategy.asset()).balanceOf(
             address(_strategy)
@@ -438,15 +517,6 @@ contract Setup is Test, IEvents {
         assertEq(_debt, _totalDebt, "!totalDebt");
         assertEq(_idle, _totalIdle, "!totalIdle");
         assertEq(_totalAssets, _totalDebt + _totalIdle, "!Added");
-    }
-
-    function simulateMerkleClaim() public {
-        // aim for roughly 5% APR on $1M, so ~$1300 from rewards in 10 days
-        if (block.chainid == 137) {
-            deal(merkleRewardToken, address(strategy), 5_000e18);
-        } else {
-            deal(merkleRewardToken, address(strategy), 200e18);
-        }
     }
 
     function airdrop(ERC20 _asset, address _to, uint256 _amount) public {

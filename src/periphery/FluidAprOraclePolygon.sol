@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import "src/periphery/FluidStructs.sol";
+import {FluidStructs} from "src/libraries/FluidStructs.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {ILendingResolver, ILiquidtyResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
-import {UniswapV3SwapSimulator, ISwapRouter} from "src/periphery/UniswapV3SwapSimulator.sol";
+import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSimulator.sol";
 
 contract FluidAprOraclePolygon {
     /// @notice Operator role can set rewardTokensPerSecond
@@ -36,6 +36,7 @@ contract FluidAprOraclePolygon {
     uint256 constant YEAR = 31536000;
 
     constructor(address _operator) {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 

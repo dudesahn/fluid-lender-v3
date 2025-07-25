@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Base4626Compounder, ERC20, SafeERC20} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Auction} from "@periphery/Auctions/Auction.sol";
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
-import {IAuction} from "src/interfaces/IAuction.sol";
 import {IMerkleRewards} from "src/interfaces/FluidInterfaces.sol";
 
 contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
@@ -50,10 +50,14 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
             require(_feeBaseToAsset > 0, "!fee");
             _setUniFees(base, address(asset), _feeBaseToAsset);
         }
-        minAmountToSell = 100e18; // 100 FLUID = 400 USD
+        minAmountToSell = 100e18; // 100 FLUID = 600 USD
     }
 
     /* ========== VIEW FUNCTIONS ========== */
+
+    function balanceOfRewards() public view returns (uint256) {
+        return FLUID.balanceOf(address(this));
+    }
 
     function availableDepositLimit(
         address _receiver
@@ -106,9 +110,16 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
 
     function _claimAndSellRewards() internal override {
         // do UniV3 selling here of FLUID to underlying
-        uint256 balance = FLUID.balanceOf(address(this));
+        uint256 balance = balanceOfRewards();
         if (balance > minAmountToSell && !useAuction) {
             _swapFrom(address(FLUID), address(asset), balance, 0);
+        }
+        balance = balanceOfAsset();
+        if (!TokenizedStrategy.isShutdown()) {
+            // no need to waste gas on depositing dust
+            if (balance > 1_000) {
+                _deployFunds(balance);
+            }
         }
     }
 
@@ -129,7 +140,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
         );
         uint256 _balance = ERC20(_from).balanceOf(address(this));
         ERC20(_from).safeTransfer(auction, _balance);
-        return IAuction(auction).kick(_from);
+        return Auction(auction).kick(_from);
     }
 
     /* ========== SETTERS ========== */
@@ -141,9 +152,13 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
      */
     function setAuction(address _auction) external onlyManagement {
         if (_auction != address(0)) {
-            require(IAuction(_auction).want() == address(asset), "wrong want");
             require(
-                IAuction(_auction).receiver() == address(this),
+                Auction(_auction).want() == address(asset) ||
+                    Auction(_auction).want() == address(vault),
+                "wrong want"
+            );
+            require(
+                Auction(_auction).receiver() == address(this),
                 "wrong receiver"
             );
         }
@@ -156,7 +171,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
      * @param _fluidToBase UniV3 swap fee for FLUID => base (WETH)
      * @param _baseToAsset UniV3 swap fee for base => asset
      */
-    function setUniFees(
+    function setUniV3Fees(
         uint24 _fluidToBase,
         uint24 _baseToAsset
     ) external onlyManagement {
