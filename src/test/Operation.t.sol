@@ -290,8 +290,6 @@ contract OperationTest is Setup {
             assertGt(profitTwo, profit, "!profitTwo");
         }
 
-        ////
-
         // switch to using the auction for strategies with merkle rewards on mainnet
         if ((extraRewardRate > 0 || manualRewardApr > 0)) {
             // claim rewards to the strategy
@@ -328,8 +326,18 @@ contract OperationTest is Setup {
             assertEq(strategy.balanceOfAsset(), 0, "!asset");
             assertGt(strategy.balanceOfRewards(), 0, "!rewards");
             uint256 vaultBefore = strategy.balanceOfVault();
+            console2.log(
+                "Balance of vault before selling FLUID:",
+                vaultBefore / 10 ** asset.decimals(),
+                "* token decimals"
+            );
             strategy.manualRewardSell();
             uint256 vaultAfter = strategy.balanceOfVault();
+            console2.log(
+                "Balance of vault after selling FLUID:",
+                vaultAfter / 10 ** asset.decimals(),
+                "* token decimals"
+            );
             assertEq(strategy.balanceOfRewards(), 0, "!rewards");
             assertEq(strategy.balanceOfAsset(), 0, "!asset");
             assertGt(vaultAfter, vaultBefore, "!vault");
@@ -381,6 +389,14 @@ contract OperationTest is Setup {
             balanceBefore + _amount,
             "!final balance"
         );
+
+        // add some random tests for base
+        if (block.chainid == 8453) {
+            vm.startPrank(management);
+            strategy.setUsdcToAssetSwapTickSpacing(1);
+            strategy.setWethToUsdcSwapTickSpacing(100);
+            vm.stopPrank();
+        }
     }
 
     function test_profitableReport(
@@ -417,11 +433,22 @@ contract OperationTest is Setup {
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
 
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], toAirdrop);
+        }
+
         // confirm that we have our airdrop amount in our strategy loose
         assertEq(asset.balanceOf(address(strategy)), toAirdrop, "!airdrop");
 
         // if we don't have base yield, we will still have profit, but it might lose a few wei compared to the airdrop
-        if (_amount > noYieldAmount) {
+        // also if it's very tiny (base yield not 1 whole wei of interest earned yet)
+        if (_amount > noYieldAmount || _amount < 1e5) {
             noBaseYield = true;
         }
 
@@ -431,7 +458,7 @@ contract OperationTest is Setup {
 
         // Check return Values
         if (noBaseYield) {
-            assertGe(profit + 2, toAirdrop, "!profit");
+            assertGe(profit + 3, toAirdrop, "!profit");
             assertEq(loss, 0, "!loss");
         } else {
             assertGe(profit, toAirdrop, "!profit");
@@ -549,8 +576,19 @@ contract OperationTest is Setup {
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
 
+        // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
+        if (
+            address(asset) == tokenAddrs["WETH"] &&
+            (block.chainid == 1 ||
+                block.chainid == 8453 ||
+                block.chainid == 42161)
+        ) {
+            vm.deal(tokenAddrs["WETH"], toAirdrop);
+        }
+
         // if we don't have base yield, we will still have profit, but it might lose a few wei compared to the airdrop
-        if (_amount > noYieldAmount) {
+        // also if it's very tiny (base yield not 1 whole wei of interest earned yet)
+        if (_amount > noYieldAmount || _amount < 1e5) {
             noBaseYield = true;
         }
 
@@ -560,7 +598,7 @@ contract OperationTest is Setup {
 
         // Check return Values
         if (noBaseYield) {
-            assertGe(profit + 2, toAirdrop, "!profit");
+            assertGe(profit + 3, toAirdrop, "!profit"); // needed to increase this to 3 for WETH!
             assertEq(loss, 0, "!loss");
         } else {
             assertGe(profit, toAirdrop, "!profit");

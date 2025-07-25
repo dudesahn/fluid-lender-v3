@@ -51,14 +51,12 @@ contract FluidLenderFactoryMainnet {
      * @dev This will set the msg.sender to all of the permissioned roles. Can only be called by management.
      * @param _asset The underlying asset for the lender to use.
      * @param _name The name for the lender to use.
-     * @param _feeBaseToAsset Fee for UniV3 pool of WETH <> asset. Use 0 if asset is WETH.
      * @return . The address of the new lender.
      */
     function newFluidLender(
         address _asset,
         string memory _name,
-        address _vault,
-        uint24 _feeBaseToAsset
+        address _vault
     ) external onlyManagement returns (address) {
         // slither-disable-start reentrancy-no-eth,reentrancy-events
         // make sure we don't already have a strategy deployed for the asset
@@ -67,9 +65,7 @@ contract FluidLenderFactoryMainnet {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface newStrategy = IStrategyInterface(
-            address(
-                new FluidLenderMainnet(_asset, _name, _vault, _feeBaseToAsset)
-            )
+            address(new FluidLenderMainnet(_asset, _name, _vault))
         );
         newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
 

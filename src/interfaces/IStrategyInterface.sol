@@ -91,4 +91,8 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
     function setUseAuction(bool _useAuction) external;
 
     function manualRewardSell() external;
+
+    function setWethToUsdcSwapTickSpacing(int24) external;
+
+    function setUsdcToAssetSwapTickSpacing(int24) external;
 }

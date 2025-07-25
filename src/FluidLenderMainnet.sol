@@ -33,13 +33,11 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
      * @param _asset Underlying asset to use for this strategy.
      * @param _name Name to use for this strategy.
      * @param _vault ERC4626 vault token to use.
-     * @param _feeBaseToAsset Fee for UniV3 pool of WETH <> asset. Use 0 if asset is WETH.
      */
     constructor(
         address _asset,
         string memory _name,
-        address _vault,
-        uint24 _feeBaseToAsset
+        address _vault
     ) Base4626Compounder(_asset, _name, _vault) {
         FLUID.forceApprove(router, type(uint256).max);
 
@@ -47,8 +45,8 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
         // 0.3% pool better execution at relatively small size than deeper 1% pool
         _setUniFees(address(FLUID), base, 3000); // UniV3 fees in 1/100 of bps
         if (address(asset) != base) {
-            require(_feeBaseToAsset > 0, "!fee");
-            _setUniFees(base, address(asset), _feeBaseToAsset);
+            // 0.05% for both USDC and USDT-WETH pools
+            _setUniFees(base, address(asset), 500);
         }
         minAmountToSell = 100e18; // 100 FLUID = 600 USD
     }
