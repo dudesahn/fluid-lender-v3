@@ -18,17 +18,21 @@ contract OracleTest is Setup {
         super.setUp();
         // deploy our factory and strategy
         vm.startPrank(management);
+        vm.expectRevert("ZERO_ADDRESS");
 
         if (block.chainid == 1) {
+            oracle = IOracle(address(new FluidAprOracleMainnet(address(0))));
             oracle = IOracle(address(new FluidAprOracleMainnet(management)));
             // set the rewards rate for our oracle
             oracle.setRewardsRate(fluidVault, extraRewardRate);
         } else if (block.chainid == 137) {
+            oracle = IOracle(address(new FluidAprOraclePolygon(address(0))));
             oracle = IOracle(address(new FluidAprOraclePolygon(management)));
             // set the rewards rate for our oracle
             oracle.setRewardsRate(fluidVault, extraRewardRate);
         } else if (block.chainid == 8453) {
             // base
+            oracle = IOracle(address(new FluidAprOracleBase(address(0))));
             oracle = IOracle(address(new FluidAprOracleBase(management)));
 
             // set the APR manually for our oracle
@@ -39,6 +43,7 @@ contract OracleTest is Setup {
             oracle.setRewardsRate(fluidVault, extraRewardRate);
         } else {
             // arbitrum
+            oracle = IOracle(address(new FluidAprOracleArbitrum(address(0))));
             oracle = IOracle(address(new FluidAprOracleArbitrum(management)));
 
             // set the APR manually for our oracle
@@ -150,6 +155,24 @@ contract OracleTest is Setup {
             console2.log("Current FLUID Price:", fluidPrice);
             console2.log("Current FLUID Price (dollars):", (fluidPrice) / 1e6);
         }
+
+        // do some checks for our setters too
+        vm.expectRevert("!operator");
+        vm.prank(user);
+        oracle.setOperator(user);
+
+        // shouldn't be able to set manual rewards without first flipping to use manual rewards
+        vm.expectRevert("!manualRewards");
+        vm.startPrank(management);
+        oracle.setManualRewardsApr(fluidVault, 100);
+        oracle.setManualRewardsApr(fluidVault, 0);
+        oracle.setUseManualRewardsApr(true);
+        vm.expectRevert("!rewards");
+        oracle.setRewardsRate(fluidVault, 100);
+        oracle.setManualRewardsApr(fluidVault, 100);
+        oracle.setRewardsRate(fluidVault, 0);
+        oracle.setOperator(management);
+        vm.stopPrank();
     }
 
     function checkOracle(address _strategy, uint256 _delta) public {

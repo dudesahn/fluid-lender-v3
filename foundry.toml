@@ -4,9 +4,8 @@ out = 'out'
 libs = ['lib']
 solc = "0.8.28"
 evm_version = "cancun"
-optimizer = true
+optimizer = false
 optimizer-runs = 200
-
 
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",

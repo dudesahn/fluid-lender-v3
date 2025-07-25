@@ -33,6 +33,8 @@ interface IOracle {
 
     function setUseManualRewardsApr(bool _useManualRewardsApr) external;
 
+    function setOperator(address _operator) external;
+
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond

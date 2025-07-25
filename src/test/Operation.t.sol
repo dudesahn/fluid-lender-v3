@@ -5,11 +5,13 @@ import "forge-std/console2.sol";
 import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
 
 contract OperationTest is Setup {
+    bytes32[] public proof;
+
     function setUp() public virtual override {
         super.setUp();
     }
 
-    function test_setupStrategyOK() public {
+    function test_setupStrategyOK() public view {
         console2.log("address of strategy", address(strategy));
         assertTrue(address(0) != address(strategy));
         assertEq(strategy.asset(), address(asset));
@@ -140,6 +142,61 @@ contract OperationTest is Setup {
                 "!final balance"
             );
         }
+    }
+
+    // just deploy, and test, thought I could get fancy with this but I couldn't get the byte32 of the address to work!!!!!
+    // tbh might be something else reverting; it's just hard to know
+    function test_merkle_claim() public {
+        // deploy our contract code to the address we already know has claimable rewards
+        // we also already have all the params needed from the API
+        //         address targetAddress = 0xd0002c648CCa8DeE2f2b8D70D542Ccde8ad6EC03;
+        //         if (block.chainid == 1) {
+        //             deployCodeTo(
+        //                 "FluidLenderFactoryMainnet.sol",
+        //                 abi.encode(
+        //                     address(asset),
+        //                     "Fluid Lender",
+        //                     fluidVault,
+        //                     baseToAsset
+        //                 ),
+        //                 targetAddress
+        //             );
+        //
+        //             // setup our interface
+        //             IStrategyInterface simulatedStrategy = IStrategyInterface(
+        //                 targetAddress
+        //             );
+        //             proof.push(0xd0af2d6adbf5605aa18d035a2a8fa4f8da2d64e23a11b3570181a4d6c6e5315f);
+        //             proof.push(0x7a9cca7adda0c6b0f4f6dffd2d66977500c9481da427569a75ec3383c1687e20);
+        //             proof.push(0xab0b28350d6e4b76f18b94f9bd22b0c51a2281db78cc8056fefa6693a897e760);
+        //             proof.push(0x58f51101395c47975000a5c571f6f7333c815af80025f9798d7c23459bd0ec7b);
+        //             proof.push(0x2c2059da83f869bebbca90698650dfd04679fb951d43c1e5cbe1cd342f652e62);
+        //             proof.push(0xa5ae6154f4814d085474bf8b6fb0727373440fec5758dcb54f04759a22b28770);
+        //             proof.push(0xad6ea2966a6fc2e1dfb7833b10da035bc360a14bdba8d32d2d2de1520e556dfb);
+        //             proof.push(0x2a4138a145ca119b30efec73eb347b71eb87eedacbb8966d6915a6f20c14d630);
+        //             proof.push(0x12c9036fd4f14090c5c9499ace6fedae060d87401be44a824d05201f2762ea58);
+        //             proof.push(0x78257d57f38e3e62938a2936b0eeb39345219087a3beffecd1849c8c30540b95);
+        //             proof.push(0xefaaae551c55874d8009ecd06a371a4f5019e5cae616fb8c777de73793f58f5f);
+        //             proof.push(0xdf07bcf9164ae6a19294beda59cff286fee99a1be27cc3e6fae25928c5737598);
+        //             proof.push(0x3870646ab32d19f3c9329aeee9092b1a08c6417a064c33195c54db5bda781258);
+        //
+        //             bytes memory encodedData = "0000000000000000000000009fb7b4477576fe5b32be4c1843afb1e55f251b33";
+        //
+        //             bytes32 thing = abi.decode(encodedData, (bytes32));
+        //
+        //             // thought about testing a direct call here but that's kind of cheating since it's not testing the strategy function
+        //             (bool sent, bytes memory data) = _to.call{value: msg.value}("")
+        //
+        //             simulatedStrategy.claimRewards(
+        //                 address(simulatedStrategy),
+        //                 266360339003518200,
+        //                 1,
+        //                 thing,
+        //                 672,
+        //                 proof,
+        //                 ""
+        //             );
+        //         }
     }
 
     function test_operation_fixed() public {
