@@ -8,16 +8,16 @@ import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
 
 contract FluidAprOracleArbitrum {
-    /// @notice Operator role can set rewardTokensPerSecond
+    /// @notice Operator role can update merkle reward info
     address public operator;
 
     /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
     bool public useManualRewardsApr;
 
-    /// @notice Mapping for Fluid market => reward tokens per second (in FLUID)
+    /// @notice Mapping for Fluid market (vault) => reward tokens per second (in FLUID)
     mapping(address market => uint256 rewardTokensPerSecond) public rewards;
 
-    /// @notice Mapping for Fluid market => manual rewards apr
+    /// @notice Mapping for Fluid market (vault) => manual rewards apr
     mapping(address market => uint256 rewardsApr) public manualRewardsApr;
 
     /// @notice Fluid's lending resolver contract.
@@ -36,12 +36,15 @@ contract FluidAprOracleArbitrum {
     IChainlinkCalcs public constant CHAINLINK_CALCS =
         IChainlinkCalcs(0x9d032763693D4eF989b630de2eCA8750BDe88219);
 
+    /// @notice FLUID-WETH pair on Fluid DEX. Best source to price FLUID on Arbitrum.
     address public immutable FLUID_WETH_DEX =
         0x2886a01a0645390872a9eb99dAe1283664b0c524;
 
+    /// @notice WETH token address
     address public immutable WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
 
-    uint256 constant YEAR = 31536000;
+    /// @notice Seconds in a year
+    uint256 public constant YEAR = 31536000;
 
     constructor(address _operator) {
         require(_operator != address(0), "ZERO_ADDRESS");
@@ -85,6 +88,12 @@ contract FluidAprOracleArbitrum {
         apr = supplyRate + assetRewardRate + fluidRewardRate;
     }
 
+    /**
+     * @notice Get the base supply APR for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return supplyRate The expected supply apr for the strategy represented as 1e18.
+     */
     function getSupplyRate(
         address _strategy,
         int256 _delta
@@ -124,6 +133,13 @@ contract FluidAprOracleArbitrum {
         supplyRate = (supplyRate * oldSupply) / supply;
     }
 
+    /**
+     * @notice Get the reward APRs for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return assetRewardRate The expected in-kind asset reward rate for the strategy represented as 1e18.
+     * @return fluidRewardRate The expected FLUID reward apr for the strategy represented as 1e18.
+     */
     function getRewardRates(
         address _strategy,
         int256 _delta
@@ -173,6 +189,7 @@ contract FluidAprOracleArbitrum {
         }
     }
 
+    /// @notice Get price of FLUID token in USDC.
     function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
         // pull the price from the Fluid DEX
         uint256 storageVar = DEX_RESOLVER.getDexVariablesRaw(FLUID_WETH_DEX);
@@ -189,6 +206,12 @@ contract FluidAprOracleArbitrum {
 
     /* ========== SETTERS ========== */
 
+    /**
+     * @notice Set the reward tokens per second for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _rewardTokensPerSecond Reward tokens per second. Pull this data from Fluid's API.
+     */
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond
@@ -199,6 +222,12 @@ contract FluidAprOracleArbitrum {
         rewards[_market] = _rewardTokensPerSecond;
     }
 
+    /**
+     * @notice Set the manual reward token APR for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _manualRewardsApr Reward token APR, 1e18 = 100%. Pull this data from Fluid's API.
+     */
     function setManualRewardsApr(
         address _market,
         uint256 _manualRewardsApr
@@ -209,10 +238,21 @@ contract FluidAprOracleArbitrum {
         manualRewardsApr[_market] = _manualRewardsApr;
     }
 
+    /**
+     * @notice Update the operator address.
+     * @dev May only be called by operator.
+     * @param _operator The new operator.
+     */
     function setOperator(address _operator) external onlyOperator {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 
+    /**
+     * @notice Set whether to use manual reward apr or rewards rate for APR calculations.
+     * @dev May only be called by operator.
+     * @param _useManualRewardsApr Whether to use manual rewards APR or not. Ideally this stays false.
+     */
     function setUseManualRewardsApr(
         bool _useManualRewardsApr
     ) external onlyOperator {

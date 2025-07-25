@@ -5,15 +5,22 @@ import {FluidLenderArbitrum} from "src/FluidLenderArbitrum.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
 contract FluidLenderFactoryArbitrum {
-    event NewFluidLender(address indexed strategy, address indexed asset);
-
+    /// @notice Management role controls important setters on this factory and deployed strategies
     address public management;
+
+    /// @notice This address receives any performance fees
     address public performanceFeeRecipient;
+
+    /// @notice Keeper address is allowed to report and tend deployed strategies
     address public keeper;
+
+    /// @notice Address authorized for emergency procedures (shutdown and withdraw) on strategy
     address public emergencyAdmin;
 
     /// @notice Track the deployments. asset => strategy
-    mapping(address => address) public deployments;
+    mapping(address asset => address strategy) public deployments;
+
+    event NewFluidLender(address indexed strategy, address indexed asset);
 
     constructor(
         address _management,

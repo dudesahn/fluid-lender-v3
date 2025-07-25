@@ -9,7 +9,7 @@ import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSi
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
 
 contract FluidAprOracleMainnet {
-    /// @notice Operator role can set rewardTokensPerSecond
+    /// @notice Operator role can update merkle reward info
     address public operator;
 
     /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
@@ -29,16 +29,21 @@ contract FluidAprOracleMainnet {
     ILiquidtyResolver public constant LIQUIDITY_RESOLVER =
         ILiquidtyResolver(0xF82111c4354622AB12b9803cD3F6164FCE52e847);
 
-    /// @notice Array of our fToken markets with bonus rewards
-    address[] public marketsWithRewards;
-
-    // internal state vars used for pricing FLUID
-    address public constant UNISWAP_V3_ROUTER =
-        0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address public constant FLUID = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
-    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    /// @notice Yearn's Chainlink calculation helper contract.
     IChainlinkCalcs public constant CHAINLINK_CALCS =
         IChainlinkCalcs(0xc8D60D8273E69E63eAFc4EA342f96AD593A4ba10);
+
+    /// @notice Uniswap V3 router
+    address public constant UNISWAP_V3_ROUTER =
+        0xE592427A0AEce92De3Edee1F18E0157C05861564;
+
+    /// @notice FLUID token address
+    address public constant FLUID = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
+
+    /// @notice WETH token address
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    /// @notice Seconds in a year
     uint256 public constant YEAR = 31536000;
 
     constructor(address _operator) {
@@ -83,25 +88,12 @@ contract FluidAprOracleMainnet {
         apr = supplyRate + assetRewardRate + fluidRewardRate;
     }
 
-    function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
-        uint256 fluidInWeth = UniswapV3SwapSimulator.simulateExactInputSingle(
-            ISwapRouter(UNISWAP_V3_ROUTER),
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: FLUID,
-                tokenOut: WETH,
-                fee: 3000,
-                recipient: address(0),
-                deadline: block.timestamp,
-                amountIn: 1e18,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
-
-        // use chainlink to convert weth to USDC (6 decimals)
-        fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e18;
-    }
-
+    /**
+     * @notice Get the base supply APR for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return supplyRate The expected supply apr for the strategy represented as 1e18.
+     */
     function getSupplyRate(
         address _strategy,
         int256 _delta
@@ -141,6 +133,13 @@ contract FluidAprOracleMainnet {
         supplyRate = (supplyRate * oldSupply) / supply;
     }
 
+    /**
+     * @notice Get the reward APRs for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return assetRewardRate The expected in-kind asset reward rate for the strategy represented as 1e18.
+     * @return fluidRewardRate The expected FLUID reward apr for the strategy represented as 1e18.
+     */
     function getRewardRates(
         address _strategy,
         int256 _delta
@@ -190,8 +189,34 @@ contract FluidAprOracleMainnet {
         }
     }
 
+    /// @notice Get price of FLUID token in USDC.
+    function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
+        uint256 fluidInWeth = UniswapV3SwapSimulator.simulateExactInputSingle(
+            ISwapRouter(UNISWAP_V3_ROUTER),
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: FLUID,
+                tokenOut: WETH,
+                fee: 3000,
+                recipient: address(0),
+                deadline: block.timestamp,
+                amountIn: 1e18,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+
+        // use chainlink to convert weth to USDC (6 decimals)
+        fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e18;
+    }
+
     /* ========== SETTERS ========== */
 
+    /**
+     * @notice Set the reward tokens per second for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _rewardTokensPerSecond Reward tokens per second. Pull this data from Fluid's API.
+     */
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond
@@ -202,6 +227,12 @@ contract FluidAprOracleMainnet {
         rewards[_market] = _rewardTokensPerSecond;
     }
 
+    /**
+     * @notice Set the manual reward token APR for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _manualRewardsApr Reward token APR, 1e18 = 100%. Pull this data from Fluid's API.
+     */
     function setManualRewardsApr(
         address _market,
         uint256 _manualRewardsApr
@@ -212,10 +243,21 @@ contract FluidAprOracleMainnet {
         manualRewardsApr[_market] = _manualRewardsApr;
     }
 
+    /**
+     * @notice Update the operator address.
+     * @dev May only be called by operator.
+     * @param _operator The new operator.
+     */
     function setOperator(address _operator) external onlyOperator {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 
+    /**
+     * @notice Set whether to use manual reward apr or rewards rate for APR calculations.
+     * @dev May only be called by operator.
+     * @param _useManualRewardsApr Whether to use manual rewards APR or not. Ideally this stays false.
+     */
     function setUseManualRewardsApr(
         bool _useManualRewardsApr
     ) external onlyOperator {

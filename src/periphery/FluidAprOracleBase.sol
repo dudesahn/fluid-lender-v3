@@ -8,7 +8,7 @@ import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
 
 contract FluidAprOracleBase {
-    /// @notice Operator role can set rewardTokensPerSecond
+    /// @notice Operator role can update merkle reward info
     address public operator;
 
     /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
@@ -36,12 +36,15 @@ contract FluidAprOracleBase {
     IChainlinkCalcs public constant CHAINLINK_CALCS =
         IChainlinkCalcs(0x20e1F95cd5CD6954f16B7455a4C8fA1aDb99eb4D);
 
+    /// @notice FLUID-WETH pair on Fluid DEX. Best source to price FLUID on Base.
     address public constant FLUID_WETH_DEX =
         0xdE632C3a214D5f14C1d8ddF0b92F8BCd188fee45;
 
+    /// @notice WETH token address
     address public constant WETH = 0x4200000000000000000000000000000000000006;
 
-    uint256 constant YEAR = 31536000;
+    /// @notice Seconds in a year
+    uint256 public constant YEAR = 31536000;
 
     constructor(address _operator) {
         require(_operator != address(0), "ZERO_ADDRESS");
@@ -85,6 +88,12 @@ contract FluidAprOracleBase {
         apr = supplyRate + assetRewardRate + fluidRewardRate;
     }
 
+    /**
+     * @notice Get the base supply APR for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return supplyRate The expected supply apr for the strategy represented as 1e18.
+     */
     function getSupplyRate(
         address _strategy,
         int256 _delta
@@ -124,6 +133,13 @@ contract FluidAprOracleBase {
         supplyRate = (supplyRate * oldSupply) / supply;
     }
 
+    /**
+     * @notice Get the reward APRs for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return assetRewardRate The expected in-kind asset reward rate for the strategy represented as 1e18.
+     * @return fluidRewardRate The expected FLUID reward apr for the strategy represented as 1e18.
+     */
     function getRewardRates(
         address _strategy,
         int256 _delta
@@ -180,6 +196,7 @@ contract FluidAprOracleBase {
         }
     }
 
+    /// @notice Get price of FLUID token in USDC.
     function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
         // pull the price from the Fluid DEX
         uint256 storageVar = DEX_RESOLVER.getDexVariablesRaw(FLUID_WETH_DEX);
@@ -196,6 +213,12 @@ contract FluidAprOracleBase {
 
     /* ========== SETTERS ========== */
 
+    /**
+     * @notice Set the reward tokens per second for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _rewardTokensPerSecond Reward tokens per second. Pull this data from Fluid's API.
+     */
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond
@@ -206,6 +229,12 @@ contract FluidAprOracleBase {
         rewards[_market] = _rewardTokensPerSecond;
     }
 
+    /**
+     * @notice Set the manual reward token APR for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _manualRewardsApr Reward token APR, 1e18 = 100%. Pull this data from Fluid's API.
+     */
     function setManualRewardsApr(
         address _market,
         uint256 _manualRewardsApr
@@ -216,10 +245,21 @@ contract FluidAprOracleBase {
         manualRewardsApr[_market] = _manualRewardsApr;
     }
 
+    /**
+     * @notice Update the operator address.
+     * @dev May only be called by operator.
+     * @param _operator The new operator.
+     */
     function setOperator(address _operator) external onlyOperator {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 
+    /**
+     * @notice Set whether to use manual reward apr or rewards rate for APR calculations.
+     * @dev May only be called by operator.
+     * @param _useManualRewardsApr Whether to use manual rewards APR or not. Ideally this stays false.
+     */
     function setUseManualRewardsApr(
         bool _useManualRewardsApr
     ) external onlyOperator {
