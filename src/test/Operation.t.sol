@@ -149,6 +149,15 @@ contract OperationTest is Setup {
             _amount = 275 * (10 ** asset.decimals());
         }
 
+        // set min amounts to sell
+        if (block.chainid == 42161) {
+            vm.prank(management);
+            strategy.setMinFluidToSell(100e18);
+        } else {
+            vm.prank(management);
+            strategy.setMinAmountToSell(100e18);
+        }
+
         // Deposit into strategy
         // since Fluid auto-unwraps WETH to ETH, we must deal ether to WETH in the same amount so the tokens are backed
         if (
@@ -188,8 +197,6 @@ contract OperationTest is Setup {
 
         skip(strategy.profitMaxUnlockTime());
 
-        uint256 balanceBefore = asset.balanceOf(user);
-
         // log what our maxRedeem is
         uint256 maxRedeem = strategy.maxRedeem(user);
         console2.log("Max Redeem for user:", maxRedeem);
@@ -225,6 +232,88 @@ contract OperationTest is Setup {
         if (extraRewardRate > 0 || manualRewardApr > 0) {
             assertGt(profitTwo, profit, "!profitTwo");
         }
+
+        ////
+
+        // switch to using the auction for strategies with merkle rewards on mainnet
+        if ((extraRewardRate > 0 || manualRewardApr > 0)) {
+            // claim rewards to the strategy
+            simulateMerkleClaim();
+
+            // auction time
+            vm.startPrank(management);
+            vm.expectRevert("!auction");
+            strategy.setUseAuction(true);
+            strategy.setAuction(address(auction));
+            strategy.setUseAuction(true);
+            vm.stopPrank();
+
+            // simulate our auction process
+            uint256 simulatedProfit = _amount / 200; // 0.5% profit
+            simulateAuction(simulatedProfit);
+
+            // Report profit
+            vm.prank(keeper);
+            (uint256 profitThree, uint256 lossThree) = strategy.report();
+            console2.log(
+                "Profit from auction report:",
+                profitThree / 10 ** asset.decimals(),
+                "* token decimals"
+            );
+            assertGt(profitThree, 0, "!profit");
+            assertEq(lossThree, 0, "!loss");
+
+            // simulate merkle claim, manually sell atomically
+            assertEq(strategy.balanceOfRewards(), 0, "!rewards");
+            simulateMerkleClaim();
+            vm.startPrank(management);
+            strategy.setUseAuction(false);
+            assertEq(strategy.balanceOfAsset(), 0, "!asset");
+            assertGt(strategy.balanceOfRewards(), 0, "!rewards");
+            uint256 vaultBefore = strategy.balanceOfVault();
+            strategy.manualRewardSell();
+            uint256 vaultAfter = strategy.balanceOfVault();
+            assertEq(strategy.balanceOfRewards(), 0, "!rewards");
+            assertEq(strategy.balanceOfAsset(), 0, "!asset");
+            assertGt(vaultAfter, vaultBefore, "!vault");
+            // also do other setters (uniV3 fees)
+            if (block.chainid == 1) {
+                strategy.setUniV3Fees(100, 100);
+            } else if (block.chainid == 137 || block.chainid == 42161) {
+                strategy.setUniV3Fees(100);
+            }
+            vm.stopPrank();
+        }
+
+        // fully unlock our profit
+        skip(strategy.profitMaxUnlockTime());
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // airdrop some asset to the strategy to test our reverts
+        airdrop(asset, address(strategy), 1_000e18);
+        address vault = strategy.vault();
+        vm.startPrank(management);
+        vm.expectRevert("cannot kick");
+        strategy.kickAuction(address(asset));
+        vm.expectRevert("cannot kick");
+        strategy.kickAuction(vault);
+        vm.stopPrank();
+
+        // hit some more reverts deploying evil auctions
+        address rewardToken;
+        if (block.chainid == 137) {
+            rewardToken = strategy.WPOL();
+        } else {
+            rewardToken = strategy.FLUID();
+        }
+        setUpAuction(rewardToken, address(strategy), address(strategy));
+        vm.expectRevert("wrong want");
+        vm.prank(management);
+        strategy.setAuction(address(auction));
+        setUpAuction(rewardToken, address(asset), user);
+        vm.expectRevert("wrong receiver");
+        vm.prank(management);
+        strategy.setAuction(address(auction));
 
         // Withdraw all funds
         vm.prank(user);

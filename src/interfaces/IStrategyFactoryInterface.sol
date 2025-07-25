@@ -2,6 +2,18 @@
 pragma solidity ^0.8.18;
 
 interface IStrategyFactoryInterface {
+    function management() external view returns (address);
+
+    function performanceFeeRecipient() external view returns (address);
+
+    function keeper() external view returns (address);
+
+    function emergencyAdmin() external view returns (address);
+
+    function deployments(address) external view returns (address);
+
+    function isDeployedStrategy(address) external view returns (bool);
+
     function newFluidLender(
         address _asset,
         string memory _name,
@@ -15,9 +27,10 @@ interface IStrategyFactoryInterface {
         address _vault
     ) external returns (address);
 
-    function management() external view returns (address);
-
-    function performanceFeeRecipient() external view returns (address);
-
-    function keeper() external view returns (address);
+    function setAddresses(
+        address _management,
+        address _performanceFeeRecipient,
+        address _keeper,
+        address _emergencyAdmin
+    ) external;
 }

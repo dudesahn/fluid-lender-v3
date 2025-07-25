@@ -2,15 +2,18 @@
 pragma solidity 0.8.28;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Auction} from "@periphery/Auctions/Auction.sol";
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
-import {IAuction} from "src/interfaces/IAuction.sol";
 import {IMerkleRewards} from "src/interfaces/FluidInterfaces.sol";
 
-contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
+contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     using SafeERC20 for ERC20;
 
     /// @notice Address for our reward token auction
     address public auction;
+
+    /// @notice Whether to sell rewards using auction or Uniswap V3
+    bool public useAuction;
 
     /// @notice True if strategy deposits are open to any address
     bool public openDeposits;
@@ -48,6 +51,10 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
     }
 
     /* ========== VIEW FUNCTIONS ========== */
+
+    function balanceOfRewards() public view returns (uint256) {
+        return WPOL.balanceOf(address(this));
+    }
 
     function availableDepositLimit(
         address _receiver
@@ -100,9 +107,16 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
 
     function _claimAndSellRewards() internal override {
         // do UniV3 selling here of WPOL to underlying
-        uint256 balance = WPOL.balanceOf(address(this));
+        uint256 balance = balanceOfRewards();
         if (balance > minAmountToSell) {
             _swapFrom(address(WPOL), address(asset), balance, 0);
+        }
+        balance = balanceOfAsset();
+        if (!TokenizedStrategy.isShutdown()) {
+            // no need to waste gas on depositing dust
+            if (balance > 1_000) {
+                _deployFunds(balance);
+            }
         }
     }
 
@@ -123,7 +137,7 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         );
         uint256 _balance = ERC20(_from).balanceOf(address(this));
         ERC20(_from).safeTransfer(auction, _balance);
-        return IAuction(auction).kick(_from);
+        return Auction(auction).kick(_from);
     }
 
     /* ========== SETTERS ========== */
@@ -135,9 +149,13 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
      */
     function setAuction(address _auction) external onlyManagement {
         if (_auction != address(0)) {
-            require(IAuction(_auction).want() == address(asset), "wrong want");
             require(
-                IAuction(_auction).receiver() == address(this),
+                Auction(_auction).want() == address(asset) ||
+                    Auction(_auction).want() == address(vault),
+                "wrong want"
+            );
+            require(
+                Auction(_auction).receiver() == address(this),
                 "wrong receiver"
             );
         }
@@ -149,12 +167,12 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
      * @dev Can only be called by management.
      * @param _polToAsset UniV3 swap fee for WPOL => asset
      */
-    function setUniFees(uint24 _polToAsset) external onlyManagement {
+    function setUniV3Fees(uint24 _polToAsset) external onlyManagement {
         _setUniFees(address(WPOL), address(asset), _polToAsset);
     }
 
     /**
-     * @notice Set the minimum amount of WPOL to sell
+     * @notice Set the minimum amount of FLUID to sell
      * @dev Can only be called by management.
      * @param _minAmountToSell minimum amount to sell in wei
      */
@@ -162,6 +180,16 @@ contract FluidLenderPolygon is Base4626Compounder, UniswapV3Swapper {
         uint256 _minAmountToSell
     ) external onlyManagement {
         minAmountToSell = _minAmountToSell;
+    }
+
+    /**
+     * @notice Set whether to use auction or UniV3 for rewards selling.
+     * @dev Can only be called by management.
+     * @param _useAuction Use auction to sell rewards (true) or UniV3 (false).
+     */
+    function setUseAuction(bool _useAuction) external onlyManagement {
+        if (_useAuction) require(auction != address(0), "!auction");
+        useAuction = _useAuction;
     }
 
     /**
