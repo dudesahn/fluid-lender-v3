@@ -8,7 +8,7 @@ import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Comp
 import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSimulator.sol";
 
 contract FluidAprOraclePolygon {
-    /// @notice Operator role can set rewardTokensPerSecond
+    /// @notice Operator role can update merkle reward info
     address public operator;
 
     /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
@@ -28,12 +28,18 @@ contract FluidAprOraclePolygon {
     ILiquidtyResolver public constant LIQUIDITY_RESOLVER =
         ILiquidtyResolver(0x98d900e25AAf345A4B23f454751EC5083443Fa83);
 
-    // internal state vars used for pricing WPOL
-    address constant UNISWAP_V3_ROUTER =
+    /// @notice Uniswap V3 router
+    address public constant UNISWAP_V3_ROUTER =
         0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address constant WPOL = 0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270;
-    address constant USDC = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
-    uint256 constant YEAR = 31536000;
+
+    /// @notice WPOL token address
+    address public constant WPOL = 0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270;
+
+    /// @notice USDC token address
+    address public constant USDC = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
+
+    /// @notice Seconds in a year
+    uint256 public constant YEAR = 31536000;
 
     constructor(address _operator) {
         require(_operator != address(0), "ZERO_ADDRESS");
@@ -77,22 +83,12 @@ contract FluidAprOraclePolygon {
         apr = supplyRate + assetRewardRate + polRewardRate;
     }
 
-    function getPolPriceUsdc() public view returns (uint256 polInUsdc) {
-        polInUsdc = UniswapV3SwapSimulator.simulateExactInputSingle(
-            ISwapRouter(UNISWAP_V3_ROUTER),
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: WPOL,
-                tokenOut: USDC,
-                fee: 500,
-                recipient: address(0),
-                deadline: block.timestamp,
-                amountIn: 1e18,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
-    }
-
+    /**
+     * @notice Get the base supply APR for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return supplyRate The expected supply apr for the strategy represented as 1e18.
+     */
     function getSupplyRate(
         address _strategy,
         int256 _delta
@@ -123,6 +119,13 @@ contract FluidAprOraclePolygon {
         supplyRate = (supplyRate * oldSupply) / supply;
     }
 
+    /**
+     * @notice Get the reward APRs for a given strategy.
+     * @param _strategy The token to get the apr for.
+     * @param _delta The difference in debt.
+     * @return assetRewardRate The expected in-kind asset reward rate for the strategy represented as 1e18.
+     * @return polRewardRate The expected WPOL reward apr for the strategy represented as 1e18.
+     */
     function getRewardRates(
         address _strategy,
         int256 _delta
@@ -172,8 +175,31 @@ contract FluidAprOraclePolygon {
         }
     }
 
+    /// @notice Get price of POL token in USDC.
+    function getPolPriceUsdc() public view returns (uint256 polInUsdc) {
+        polInUsdc = UniswapV3SwapSimulator.simulateExactInputSingle(
+            ISwapRouter(UNISWAP_V3_ROUTER),
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: WPOL,
+                tokenOut: USDC,
+                fee: 500,
+                recipient: address(0),
+                deadline: block.timestamp,
+                amountIn: 1e18,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+    }
+
     /* ========== SETTERS ========== */
 
+    /**
+     * @notice Set the reward tokens per second for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _rewardTokensPerSecond Reward tokens per second. Pull this data from Fluid's API.
+     */
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond
@@ -184,6 +210,12 @@ contract FluidAprOraclePolygon {
         rewards[_market] = _rewardTokensPerSecond;
     }
 
+    /**
+     * @notice Set the manual reward token APR for a given fToken market/vault.
+     * @dev May only be called by operator.
+     * @param _market The fToken to adjust
+     * @param _manualRewardsApr Reward token APR, 1e18 = 100%. Pull this data from Fluid's API.
+     */
     function setManualRewardsApr(
         address _market,
         uint256 _manualRewardsApr
@@ -194,10 +226,21 @@ contract FluidAprOraclePolygon {
         manualRewardsApr[_market] = _manualRewardsApr;
     }
 
+    /**
+     * @notice Update the operator address.
+     * @dev May only be called by operator.
+     * @param _operator The new operator.
+     */
     function setOperator(address _operator) external onlyOperator {
+        require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
     }
 
+    /**
+     * @notice Set whether to use manual reward apr or rewards rate for APR calculations.
+     * @dev May only be called by operator.
+     * @param _useManualRewardsApr Whether to use manual rewards APR or not. Ideally this stays false.
+     */
     function setUseManualRewardsApr(
         bool _useManualRewardsApr
     ) external onlyOperator {

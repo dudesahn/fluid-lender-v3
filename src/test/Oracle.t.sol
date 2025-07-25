@@ -171,6 +171,8 @@ contract OracleTest is Setup {
         oracle.setRewardsRate(fluidVault, 100);
         oracle.setManualRewardsApr(fluidVault, 100);
         oracle.setRewardsRate(fluidVault, 0);
+        vm.expectRevert("ZERO_ADDRESS");
+        oracle.setOperator(address(0));
         oracle.setOperator(management);
         vm.stopPrank();
     }
