@@ -46,34 +46,6 @@ contract FluidAprOracleMainnet {
         operator = _operator;
     }
 
-    // uint256 baseApr = 1e14 * resolver.getFTokenDetails(fToken).supplyRate // returned in bps from resolver
-    // can skip everything below for direct rewards, as it's returned in the resolver struct as rewardsRate w/ 1e14
-
-    // I think to adjust for the any changes to the totalSupply with adding or removing debt, we can literally just multiply the supplyRate by the old supply and divide by the new one
-    // then for the rewardsApr we can use the rewards helper contract since we put in totalAssets there...similarly, add or subtract from totalAssets
-    // similarly assume that the apr for FLUID rewards will change according to the assets added or removed
-    // for the rewardsApr YES use totalAssets, as the supply stuff below is from the liquidity layer which is different
-    // for any of the stupid bonus FLUID rewards, similarly use and adjust totalAssets, and also probably discount the APR the API returns by like 10% just to be conservative for price movements, etc.
-
-    // what we need to manipulate
-    // supplyRate = borrowRate * (10000 - fee) * borrowWithInterest / supplyWithInterest
-
-    // totalSupply = supplyWithInterest + supplyInterestFree
-    // supplyWithInterest = supplyRawInterest * supplyExchangePrice / decimals
-
-    // totalBorrow = borrowWithInterest_ + borrowInterestFree
-    // borrowWithInterest_ = borrowRawInterest * borrowExchangePrice / decimals
-
-    // SO, when we adjust what we are depositing, we can just multiply by the old supplyWithInterest which is just totalSupply - supplyInterestFree
-
-    // pull base APR from calling on the lending resolver FTokenDetails["supplyRate"]
-
-    // FLUID rewards on mainnet
-    // should be able to actually post the details of the campaign directly to the APR oracle, and then calculate the ∆ from there. reached out to them about this
-    // should actually be able to reverse-calculate the amount of FLUID rewards per period from the APR, price, and totalAssets (supply?); should check if USDC and USDT match amounts and across periods
-    // can pull the data from here for tokens per second: https://merkle.api.fluid.instadapp.io/programs/inst-rewards-dec-2024/apr
-    // totalSupply is literally just the shares of fTokens (ie, the token's totalSupply)
-
     /**
      * @notice Will return the expected Apr of a strategy post a debt change.
      * @dev _delta is a signed integer so that it can also represent a debt
@@ -97,70 +69,11 @@ contract FluidAprOracleMainnet {
         address _strategy,
         int256 _delta
     ) external view returns (uint256 apr) {
-        address fToken = IBase4626Compounder(_strategy).vault();
-
-        FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
-            .getFTokenDetails(fToken);
-        uint256 supplyRate = tokenDetails.supplyRate * 1e14;
-        uint256 assetRewardRate = tokenDetails.rewardsRate * 1e4;
-
-        FluidStructs.OverallTokenData memory tokenData;
-        // make a special case for WETH
-        if (ERC4626(fToken).asset() == WETH) {
-            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
-                0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
-            );
-        } else {
-            tokenData = LIQUIDITY_RESOLVER.getOverallTokenData(
-                ERC4626(fToken).asset()
-            );
-        }
-
-        // calculate what our new assets will be
-        uint256 assets = tokenDetails.totalAssets;
-        uint256 supply = tokenData.totalSupply - tokenData.supplyInterestFree;
-        uint256 oldSupply = supply;
-        if (_delta < 0) {
-            assets = assets - uint256(-_delta);
-            supply = supply - uint256(-_delta);
-        } else {
-            assets = assets + uint256(_delta);
-            supply = supply + uint256(_delta);
-        }
-
-        if (assets == 0 || supply == 0) {
-            return 0;
-        }
-
-        // adjust based on changes in supply
-        supplyRate = (supplyRate * oldSupply) / supply;
-
-        // adjust based on changes in assets
-        if (assetRewardRate > 0) {
-            assetRewardRate =
-                (assetRewardRate * tokenDetails.totalAssets) /
-                assets;
-        }
-
-        uint256 fluidRewardRate;
-        // check our mapping to see if we have any rewardsRates set
-        // note that these calculations expect only stablecoins to have extra rewards
-        if (rewards[fToken] != 0 || useManualRewardsApr) {
-            if (useManualRewardsApr) {
-                fluidRewardRate = manualRewardsApr[fToken];
-            } else {
-                // adjust based on changes in assets
-                uint256 fluidPriceUSDC = getFluidPriceUsdc();
-                uint256 decimalsAdjustment = 10 **
-                    (ERC4626(fToken).decimals() - 6);
-                fluidRewardRate =
-                    (fluidPriceUSDC *
-                        rewards[fToken] *
-                        YEAR *
-                        decimalsAdjustment) /
-                    assets;
-            }
-        }
+        uint256 supplyRate = getSupplyRate(_strategy, _delta);
+        (uint256 assetRewardRate, uint256 fluidRewardRate) = getRewardRates(
+            _strategy,
+            _delta
+        );
 
         apr = supplyRate + assetRewardRate + fluidRewardRate;
     }
@@ -187,7 +100,7 @@ contract FluidAprOracleMainnet {
     function getSupplyRate(
         address _strategy,
         int256 _delta
-    ) external view returns (uint256 supplyRate) {
+    ) public view returns (uint256 supplyRate) {
         address fToken = IBase4626Compounder(_strategy).vault();
 
         FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
@@ -226,7 +139,7 @@ contract FluidAprOracleMainnet {
     function getRewardRates(
         address _strategy,
         int256 _delta
-    ) external view returns (uint256 assetRewardRate, uint256 fluidRewardRate) {
+    ) public view returns (uint256 assetRewardRate, uint256 fluidRewardRate) {
         address fToken = IBase4626Compounder(_strategy).vault();
 
         FluidStructs.FTokenDetails memory tokenDetails = LENDING_RESOLVER
