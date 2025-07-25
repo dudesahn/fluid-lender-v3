@@ -48,6 +48,11 @@ contract FluidAprOracleArbitrum {
         operator = _operator;
     }
 
+    modifier onlyOperator() {
+        require(msg.sender == operator, "!operator");
+        _;
+    }
+
     /**
      * @notice Will return the expected Apr of a strategy post a debt change.
      * @dev _delta is a signed integer so that it can also represent a debt
@@ -182,11 +187,12 @@ contract FluidAprOracleArbitrum {
         fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e27;
     }
 
+    /* ========== SETTERS ========== */
+
     function setRewardsRate(
         address _market,
         uint256 _rewardTokensPerSecond
-    ) external {
-        require(msg.sender == operator, "!operator");
+    ) external onlyOperator {
         if (_rewardTokensPerSecond > 0) {
             require(!useManualRewardsApr, "!rewards");
         }
@@ -196,21 +202,20 @@ contract FluidAprOracleArbitrum {
     function setManualRewardsApr(
         address _market,
         uint256 _manualRewardsApr
-    ) external {
-        require(msg.sender == operator, "!operator");
+    ) external onlyOperator {
         if (_manualRewardsApr > 0) {
             require(useManualRewardsApr, "!manualRewards");
         }
         manualRewardsApr[_market] = _manualRewardsApr;
     }
 
-    function setOperator(address _operator) external {
-        require(msg.sender == operator, "!operator");
+    function setOperator(address _operator) external onlyOperator {
         operator = _operator;
     }
 
-    function setUseManualRewardsApr(bool _useManualRewardsApr) external {
-        require(msg.sender == operator, "!operator");
+    function setUseManualRewardsApr(
+        bool _useManualRewardsApr
+    ) external onlyOperator {
         useManualRewardsApr = _useManualRewardsApr;
     }
 }

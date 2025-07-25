@@ -16,7 +16,7 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
      * @param merkleProof_ Merkle proof data.
      * @param metadata_ Any extra metadata for the claim. Must match exactly from API.
      */
-    function claim(
+    function claimRewards(
         address recipient_,
         uint256 cumulativeAmount_,
         uint8 positionType_,
@@ -81,8 +81,6 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
     function WPOL() external view returns (address);
 
     function auction() external view returns (address);
-
-    function claimRewards() external;
 
     function minAmountToSell() external view returns (uint256);
 

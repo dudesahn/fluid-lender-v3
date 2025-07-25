@@ -189,6 +189,29 @@ contract Setup is Test, IEvents {
             liquidityResolver = 0xF82111c4354622AB12b9803cD3F6164FCE52e847;
             merkleRewardToken = 0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb;
 
+            // can't use zero addresses
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryMainnet(
+                address(0),
+                performanceFeeRecipient,
+                keeper,
+                emergencyAdmin
+            );
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryMainnet(
+                management,
+                address(0),
+                keeper,
+                emergencyAdmin
+            );
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryMainnet(
+                management,
+                performanceFeeRecipient,
+                keeper,
+                address(0)
+            );
+
             strategyFactory = IStrategyFactoryInterface(
                 address(
                     new FluidLenderFactoryMainnet(
@@ -198,6 +221,15 @@ contract Setup is Test, IEvents {
                         emergencyAdmin
                     )
                 )
+            );
+
+            // reverts if 0 for uni fees
+            vm.expectRevert(bytes("!fee"));
+            strategyFactory.newFluidLender(
+                address(asset),
+                "Fluid Lender",
+                fluidVault,
+                0
             );
 
             // Deploy strategy and set variables
@@ -213,6 +245,29 @@ contract Setup is Test, IEvents {
             lendingResolver = 0x8e72291D5e6f4AAB552cc827fB857a931Fc5CAC1;
             liquidityResolver = 0x98d900e25AAf345A4B23f454751EC5083443Fa83;
             merkleRewardToken = 0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270;
+
+            // can't use zero addresses
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryPolygon(
+                address(0),
+                performanceFeeRecipient,
+                keeper,
+                emergencyAdmin
+            );
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryPolygon(
+                management,
+                address(0),
+                keeper,
+                emergencyAdmin
+            );
+            vm.expectRevert("ZERO_ADDRESS");
+            new FluidLenderFactoryPolygon(
+                management,
+                performanceFeeRecipient,
+                keeper,
+                address(0)
+            );
 
             strategyFactory = IStrategyFactoryInterface(
                 address(
@@ -242,6 +297,29 @@ contract Setup is Test, IEvents {
                 chainlinkCalcs = 0x20e1F95cd5CD6954f16B7455a4C8fA1aDb99eb4D;
                 fluidDex = 0xdE632C3a214D5f14C1d8ddF0b92F8BCd188fee45;
 
+                // can't use zero addresses
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryBase(
+                    address(0),
+                    performanceFeeRecipient,
+                    keeper,
+                    emergencyAdmin
+                );
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryBase(
+                    management,
+                    address(0),
+                    keeper,
+                    emergencyAdmin
+                );
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryBase(
+                    management,
+                    performanceFeeRecipient,
+                    keeper,
+                    address(0)
+                );
+
                 strategyFactory = IStrategyFactoryInterface(
                     address(
                         new FluidLenderFactoryBase(
@@ -259,6 +337,29 @@ contract Setup is Test, IEvents {
                 dexResolver = 0x87B7E70D8F1FAcD3d154AF8559D632481724508E;
                 chainlinkCalcs = 0x9d032763693D4eF989b630de2eCA8750BDe88219;
                 fluidDex = 0x2886a01a0645390872a9eb99dAe1283664b0c524;
+
+                // can't use zero addresses
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryArbitrum(
+                    address(0),
+                    performanceFeeRecipient,
+                    keeper,
+                    emergencyAdmin
+                );
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryArbitrum(
+                    management,
+                    address(0),
+                    keeper,
+                    emergencyAdmin
+                );
+                vm.expectRevert("ZERO_ADDRESS");
+                new FluidLenderFactoryArbitrum(
+                    management,
+                    performanceFeeRecipient,
+                    keeper,
+                    address(0)
+                );
 
                 strategyFactory = IStrategyFactoryInterface(
                     address(
@@ -506,7 +607,7 @@ contract Setup is Test, IEvents {
         uint256 _totalAssets,
         uint256 _totalDebt,
         uint256 _totalIdle
-    ) public {
+    ) public view {
         uint256 _assets = _strategy.totalAssets();
         uint256 _balance = ERC20(_strategy.asset()).balanceOf(
             address(_strategy)

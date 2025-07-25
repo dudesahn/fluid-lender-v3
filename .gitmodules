@@ -18,6 +18,3 @@
 	path = lib/v3-core
 	url = https://github.com/uniswap/v3-core
 	branch = simulate
-[submodule "lib/slipstream"]
-	path = lib/slipstream
-	url = https://github.com/aerodrome-finance/slipstream
