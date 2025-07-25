@@ -123,8 +123,9 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
         uint256 balance = balanceOfRewards();
         if (balance > minFluidToSell && !useAuction) {
             _sellFluidToWeth(balance);
-            balance = ERC20(base).balanceOf(address(this));
-            _swapFrom(base, address(asset), balance, 0);
+            if (address(asset) != base) {
+                _sellWethToAsset();
+            }
         }
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
@@ -139,9 +140,13 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
         FLUID_DEX.swapIn(true, _fluidToSell, 0, address(this));
     }
 
-    function manualSwapWeth() external {
-        uint256 balance = ERC20(base).balanceOf(address(this));
-        _swapFrom(base, address(asset), balance, 0);
+    function _sellWethToAsset() internal {
+        _swapFrom(
+            base,
+            address(asset),
+            ERC20(base).balanceOf(address(this)),
+            0
+        );
     }
 
     /**

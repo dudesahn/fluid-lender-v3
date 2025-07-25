@@ -193,6 +193,10 @@ contract OracleTest is Setup {
 
         assertLt(currentApr, 1e18, "+100%");
 
+        if (address(asset) == tokenAddrs["WETH"]) {
+            vm.pauseGasMetering();
+        }
+
         uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(
             _strategy,
             -int256(_delta)
@@ -206,10 +210,6 @@ contract OracleTest is Setup {
             assertLe(currentApr, negativeDebtChangeApr, "negative change");
         } else {
             assertLt(currentApr, negativeDebtChangeApr, "negative change");
-        }
-
-        if (address(asset) == tokenAddrs["WETH"]) {
-            vm.pauseGasMetering();
         }
 
         uint256 positiveDebtChangeApr = oracle.aprAfterDebtChange(

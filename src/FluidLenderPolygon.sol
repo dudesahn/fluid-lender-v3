@@ -108,7 +108,7 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     function _claimAndSellRewards() internal override {
         // do UniV3 selling here of WPOL to underlying
         uint256 balance = balanceOfRewards();
-        if (balance > minAmountToSell) {
+        if (balance > minAmountToSell && address(asset) != address(WPOL)) {
             _swapFrom(address(WPOL), address(asset), balance, 0);
         }
         balance = balanceOfAsset();

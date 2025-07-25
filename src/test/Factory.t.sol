@@ -19,45 +19,23 @@ contract FactoryTest is Setup {
         assertEq(true, strategyFactory.isDeployedStrategy(address(strategy)));
         assertEq(false, strategyFactory.isDeployedStrategy(user));
 
-        if (block.chainid == 1) {
-            // shouldn't be able to deploy another strategy for the same gauge for curve factory
-            vm.expectRevert("strategy exists");
-            vm.prank(management);
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender",
-                fluidVault,
-                500
-            );
+        // shouldn't be able to deploy another strategy for the same asset
+        vm.expectRevert("strategy exists");
+        vm.prank(management);
+        strategyFactory.newFluidLender(
+            address(asset),
+            "Fluid Lender",
+            fluidVault
+        );
 
-            // make sure user can't deploy
-            vm.expectRevert("!management");
-            vm.prank(user);
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender",
-                fluidVault,
-                500
-            );
-        } else {
-            // shouldn't be able to deploy another strategy for the same gauge for curve factory
-            vm.expectRevert("strategy exists");
-            vm.prank(management);
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender",
-                fluidVault
-            );
-
-            // make sure user can't deploy
-            vm.expectRevert("!management");
-            vm.prank(user);
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender",
-                fluidVault
-            );
-        }
+        // make sure user can't deploy
+        vm.expectRevert("!management");
+        vm.prank(user);
+        strategyFactory.newFluidLender(
+            address(asset),
+            "Fluid Lender",
+            fluidVault
+        );
 
         // now set operator address
         vm.prank(user);

@@ -145,7 +145,9 @@ contract FluidLenderBase is Base4626Compounder {
         uint256 balance = balanceOfRewards();
         if (balance > minAmountToSell && !useAuction) {
             _sellFluidToWeth(balance);
-            _sellWethToAsset();
+            if (address(asset) != address(WETH)) {
+                _sellWethToAsset();
+            }
         }
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
@@ -160,25 +162,13 @@ contract FluidLenderBase is Base4626Compounder {
         FLUID_DEX.swapIn(true, _fluidToSell, 0, address(this));
     }
 
-    /**
-     * @notice Handles native ETH received by the contract and automatically wraps to WETH
-     * @dev Fluid's DEX returns ETH, not WETH
-     */
-    receive() external payable {
-        if (address(this).balance != 0) {
-            IWETH(address(WETH)).deposit{value: address(this).balance}();
-        }
-    }
-
     function _sellWethToAsset() internal {
         uint256 wethBalance = WETH.balanceOf(address(this));
 
         if (wethBalance > 1e12) {
-            if (address(asset) != address(WETH)) {
-                SLIPSTREAM_ROUTER.exactInputSingle(
-                    getSwapRouterInput(address(WETH), wethBalance)
-                );
-            }
+            SLIPSTREAM_ROUTER.exactInputSingle(
+                getSwapRouterInput(address(WETH), wethBalance)
+            );
         }
 
         if (address(asset) == address(USDC) || usdcToAssetSwapTickSpacing == 0)
@@ -186,10 +176,20 @@ contract FluidLenderBase is Base4626Compounder {
 
         uint256 usdcBalance = USDC.balanceOf(address(this));
 
-        if (usdcBalance >= 1e3) {
+        if (usdcBalance > 1e3) {
             SLIPSTREAM_ROUTER.exactInputSingle(
                 getSwapRouterInput(address(USDC), usdcBalance)
             );
+        }
+    }
+
+    /**
+     * @notice Handles native ETH received by the contract and automatically wraps to WETH
+     * @dev Fluid's DEX returns ETH, not WETH
+     */
+    receive() external payable {
+        if (address(this).balance != 0) {
+            IWETH(address(WETH)).deposit{value: address(this).balance}();
         }
     }
 
@@ -226,7 +226,9 @@ contract FluidLenderBase is Base4626Compounder {
         return
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: _tokenIn,
-                tokenOut: address(asset),
+                tokenOut: _tokenIn == address(WETH)
+                    ? address(USDC)
+                    : address(asset),
                 tickSpacing: _tokenIn == address(WETH)
                     ? wethToUsdcSwapTickSpacing
                     : usdcToAssetSwapTickSpacing,

@@ -59,7 +59,6 @@ contract Setup is Test, IEvents {
 
     address public fluidVault;
     address public fluidStaking;
-    uint24 public baseToAsset;
     address public fluidDex; // address of our FLUID-WETH DEXes on L2s
 
     // addresses of our resolvers and chainlink calcs, used with our apr oracles
@@ -100,7 +99,7 @@ contract Setup is Test, IEvents {
         // Set asset. This is all we should have to adjust, along with using a different network in our makefile
         asset = ERC20(tokenAddrs["USDC"]);
 
-        // consider adding GHO to test auctions with
+        // consider adding GHO to test auctions with too (atomic swaps not as simple on this, liq on balancer)
 
         // setup our fuzz amounts
         maxFuzzAmount = 1e12 * (10 ** asset.decimals());
@@ -129,11 +128,9 @@ contract Setup is Test, IEvents {
         if (block.chainid == 1) {
             if (address(asset) == tokenAddrs["USDC"]) {
                 fluidVault = 0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33;
-                baseToAsset = 500;
                 extraRewardRate = 38580246913580246;
             } else if (address(asset) == tokenAddrs["USDT"]) {
                 fluidVault = 0x5C20B550819128074FD538Edf79791733ccEdd18;
-                baseToAsset = 500;
                 extraRewardRate = 38580246913580246;
             } else {
                 // weth
@@ -223,22 +220,12 @@ contract Setup is Test, IEvents {
                 )
             );
 
-            // reverts if 0 for uni fees
-            vm.expectRevert(bytes("!fee"));
-            strategyFactory.newFluidLender(
-                address(asset),
-                "Fluid Lender",
-                fluidVault,
-                0
-            );
-
             // Deploy strategy and set variables
             strategy = IStrategyInterface(
                 strategyFactory.newFluidLender(
                     address(asset),
                     "Fluid Lender",
-                    fluidVault,
-                    baseToAsset
+                    fluidVault
                 )
             );
         } else if (block.chainid == 137) {
