@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Base4626Compounder, ERC20, SafeERC20} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {Auction} from "@periphery/Auctions/Auction.sol";
 import {ISwapRouter} from "@slipstream/periphery/interfaces/ISwapRouter.sol";
 import {IWETH} from "src/interfaces/IWETH.sol";
