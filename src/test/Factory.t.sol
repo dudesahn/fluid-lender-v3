@@ -17,7 +17,13 @@ contract FactoryTest is Setup {
             address(strategy)
         );
         assertEq(true, strategyFactory.isDeployedStrategy(address(strategy)));
-        assertEq(false, strategyFactory.isDeployedStrategy(user));
+        // use yearn's v3.0.4 vault template; same address on every chain
+        assertEq(
+            false,
+            strategyFactory.isDeployedStrategy(
+                0xd8063123BBA3B480569244AE66BFE72B6c84b00d
+            )
+        );
 
         // shouldn't be able to deploy another strategy for the same asset
         vm.expectRevert("strategy exists");
