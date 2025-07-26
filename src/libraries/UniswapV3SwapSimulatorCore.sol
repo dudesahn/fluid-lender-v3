@@ -57,6 +57,7 @@ library Simulate {
         uint256 feeAmount;
     }
 
+    // slither-disable-next-line cyclomatic-complexity
     function simulateSwap(
         IUniswapV3Pool pool,
         bool zeroForOne,
@@ -98,6 +99,7 @@ library Simulate {
             state.amountSpecifiedRemaining != 0 &&
             state.sqrtPriceX96 != sqrtPriceLimitX96
         ) {
+            // slither-disable-next-line uninitialized-local
             StepComputations memory step;
 
             step.sqrtPriceStartX96 = state.sqrtPriceX96;

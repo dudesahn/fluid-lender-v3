@@ -8,25 +8,31 @@ contract FluidLenderFactoryPolygon {
     /// @notice Management role controls important setters on this factory and deployed strategies
     address public management;
 
-    /// @notice This address receives any performance fees
-    address public performanceFeeRecipient;
+    /// @notice Address authorized for emergency procedures (shutdown and withdraw) on strategy
+    address public emergencyAdmin;
 
     /// @notice Keeper address is allowed to report and tend deployed strategies
     address public keeper;
 
-    /// @notice Address authorized for emergency procedures (shutdown and withdraw) on strategy
-    address public emergencyAdmin;
+    /// @notice This address receives any performance fees
+    address public performanceFeeRecipient;
 
     /// @notice Track the deployments. asset => strategy
     mapping(address asset => address strategy) public deployments;
 
     event NewFluidLender(address indexed strategy, address indexed asset);
+    event AddressesSet(
+        address indexed management,
+        address indexed emergencyAdmin,
+        address indexed keeper,
+        address performanceFeeRecipient
+    );
 
     constructor(
         address _management,
-        address _performanceFeeRecipient,
+        address _emergencyAdmin,
         address _keeper,
-        address _emergencyAdmin
+        address _performanceFeeRecipient
     ) {
         require(
             _performanceFeeRecipient != address(0) &&
@@ -35,10 +41,10 @@ contract FluidLenderFactoryPolygon {
             "ZERO_ADDRESS"
         );
         management = _management;
+        emergencyAdmin = _emergencyAdmin;
         performanceFeeRecipient = _performanceFeeRecipient;
         //slither-disable-next-line missing-zero-check
         keeper = _keeper;
-        emergencyAdmin = _emergencyAdmin;
     }
 
     modifier onlyManagement() {
@@ -100,16 +106,17 @@ contract FluidLenderFactoryPolygon {
 
     /**
      * @notice Set important addresses for this factory.
-     * @dev
+     * @dev Management and emergency admin control setters and emergency procedures for strategies.
      * @param _management The address to set as the management address.
+     * @param _emergencyAdmin The address to set as the emergency admin.
      * @param _performanceFeeRecipient The address to set as the performance fee recipient address.
      * @param _keeper The address to set as the keeper address.
      */
     function setAddresses(
         address _management,
-        address _performanceFeeRecipient,
+        address _emergencyAdmin,
         address _keeper,
-        address _emergencyAdmin
+        address _performanceFeeRecipient
     ) external onlyManagement {
         require(
             _performanceFeeRecipient != address(0) &&
@@ -118,9 +125,16 @@ contract FluidLenderFactoryPolygon {
             "ZERO_ADDRESS"
         );
         management = _management;
+        emergencyAdmin = _emergencyAdmin;
         performanceFeeRecipient = _performanceFeeRecipient;
         //slither-disable-next-line missing-zero-check
         keeper = _keeper;
-        emergencyAdmin = _emergencyAdmin;
+
+        emit AddressesSet(
+            _management,
+            _emergencyAdmin,
+            _keeper,
+            _performanceFeeRecipient
+        );
     }
 }

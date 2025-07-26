@@ -42,37 +42,37 @@ contract FactoryTest is Setup {
         vm.expectRevert("!management");
         strategyFactory.setAddresses(
             management,
-            performanceFeeRecipient,
+            emergencyAdmin,
             keeper,
-            emergencyAdmin
+            performanceFeeRecipient
         );
         vm.startPrank(management);
         vm.expectRevert("ZERO_ADDRESS");
         strategyFactory.setAddresses(
             address(0),
-            performanceFeeRecipient,
+            emergencyAdmin,
             keeper,
-            emergencyAdmin
+            performanceFeeRecipient
         );
         vm.expectRevert("ZERO_ADDRESS");
         strategyFactory.setAddresses(
             management,
             address(0),
             keeper,
-            emergencyAdmin
+            performanceFeeRecipient
         );
         vm.expectRevert("ZERO_ADDRESS");
         strategyFactory.setAddresses(
             management,
-            performanceFeeRecipient,
+            emergencyAdmin,
             keeper,
             address(0)
         );
         strategyFactory.setAddresses(
             management,
-            performanceFeeRecipient,
+            emergencyAdmin,
             keeper,
-            emergencyAdmin
+            performanceFeeRecipient
         );
         vm.stopPrank();
 
@@ -80,5 +80,7 @@ contract FactoryTest is Setup {
         assertEq(strategy.pendingManagement(), address(0));
         assertEq(strategy.performanceFee(), 1000);
         assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
+        assertEq(strategy.keeper(), keeper);
+        assertEq(strategy.emergencyAdmin(), emergencyAdmin);
     }
 }

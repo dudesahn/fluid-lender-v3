@@ -190,21 +190,21 @@ contract Setup is Test, IEvents {
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryMainnet(
                 address(0),
-                performanceFeeRecipient,
+                emergencyAdmin,
                 keeper,
-                emergencyAdmin
+                performanceFeeRecipient
             );
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryMainnet(
                 management,
                 address(0),
                 keeper,
-                emergencyAdmin
+                performanceFeeRecipient
             );
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryMainnet(
                 management,
-                performanceFeeRecipient,
+                emergencyAdmin,
                 keeper,
                 address(0)
             );
@@ -213,9 +213,9 @@ contract Setup is Test, IEvents {
                 address(
                     new FluidLenderFactoryMainnet(
                         management,
-                        performanceFeeRecipient,
+                        emergencyAdmin,
                         keeper,
-                        emergencyAdmin
+                        performanceFeeRecipient
                     )
                 )
             );
@@ -237,21 +237,21 @@ contract Setup is Test, IEvents {
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryPolygon(
                 address(0),
-                performanceFeeRecipient,
+                emergencyAdmin,
                 keeper,
-                emergencyAdmin
+                performanceFeeRecipient
             );
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryPolygon(
                 management,
                 address(0),
                 keeper,
-                emergencyAdmin
+                performanceFeeRecipient
             );
             vm.expectRevert("ZERO_ADDRESS");
             new FluidLenderFactoryPolygon(
                 management,
-                performanceFeeRecipient,
+                emergencyAdmin,
                 keeper,
                 address(0)
             );
@@ -260,9 +260,9 @@ contract Setup is Test, IEvents {
                 address(
                     new FluidLenderFactoryPolygon(
                         management,
-                        performanceFeeRecipient,
+                        emergencyAdmin,
                         keeper,
-                        emergencyAdmin
+                        performanceFeeRecipient
                     )
                 )
             );
@@ -288,21 +288,21 @@ contract Setup is Test, IEvents {
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryBase(
                     address(0),
-                    performanceFeeRecipient,
+                    emergencyAdmin,
                     keeper,
-                    emergencyAdmin
+                    performanceFeeRecipient
                 );
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryBase(
                     management,
                     address(0),
                     keeper,
-                    emergencyAdmin
+                    performanceFeeRecipient
                 );
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryBase(
                     management,
-                    performanceFeeRecipient,
+                    emergencyAdmin,
                     keeper,
                     address(0)
                 );
@@ -311,9 +311,9 @@ contract Setup is Test, IEvents {
                     address(
                         new FluidLenderFactoryBase(
                             management,
-                            performanceFeeRecipient,
+                            emergencyAdmin,
                             keeper,
-                            emergencyAdmin
+                            performanceFeeRecipient
                         )
                     )
                 );
@@ -329,21 +329,21 @@ contract Setup is Test, IEvents {
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryArbitrum(
                     address(0),
-                    performanceFeeRecipient,
+                    emergencyAdmin,
                     keeper,
-                    emergencyAdmin
+                    performanceFeeRecipient
                 );
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryArbitrum(
                     management,
                     address(0),
                     keeper,
-                    emergencyAdmin
+                    performanceFeeRecipient
                 );
                 vm.expectRevert("ZERO_ADDRESS");
                 new FluidLenderFactoryArbitrum(
                     management,
-                    performanceFeeRecipient,
+                    emergencyAdmin,
                     keeper,
                     address(0)
                 );
@@ -352,9 +352,9 @@ contract Setup is Test, IEvents {
                     address(
                         new FluidLenderFactoryArbitrum(
                             management,
-                            performanceFeeRecipient,
+                            emergencyAdmin,
                             keeper,
-                            emergencyAdmin
+                            performanceFeeRecipient
                         )
                     )
                 );
