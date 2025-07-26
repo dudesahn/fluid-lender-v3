@@ -45,6 +45,8 @@ contract FluidAprOracleArbitrum {
 
     /// @notice Seconds in a year
     uint256 public constant YEAR = 31536000;
+    
+    event OperatorSet(address indexed operator);
 
     constructor(address _operator) {
         require(_operator != address(0), "ZERO_ADDRESS");
@@ -246,6 +248,7 @@ contract FluidAprOracleArbitrum {
     function setOperator(address _operator) external onlyOperator {
         require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
+        emit OperatorSet(_operator);
     }
 
     /**

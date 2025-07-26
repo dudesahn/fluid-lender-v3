@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 import {IUniswapV3Factory} from "@uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
-import {Simulate, TickMath} from "src/libraries/UniswapV3SwapSimulatorCore.sol";
+import {Simulate, TickMath} from "./UniswapV3SwapSimulatorCore.sol";
 import {ISwapRouter} from "@periphery/interfaces/Uniswap/V3/ISwapRouter.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 

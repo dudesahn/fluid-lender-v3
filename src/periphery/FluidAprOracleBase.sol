@@ -190,6 +190,7 @@ contract FluidAprOracleBase {
                     uint256 eurcPrice = CHAINLINK_CALCS.getPriceUsdc(
                         ERC4626(fToken).asset()
                     );
+                    // slither-disable-next-line divide-before-multiply
                     fluidRewardRate = (fluidRewardRate * 1e6) / eurcPrice;
                 }
             }
