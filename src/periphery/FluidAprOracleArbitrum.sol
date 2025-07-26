@@ -45,7 +45,7 @@ contract FluidAprOracleArbitrum {
 
     /// @notice Seconds in a year
     uint256 public constant YEAR = 31536000;
-    
+
     event OperatorSet(address indexed operator);
 
     constructor(address _operator) {
