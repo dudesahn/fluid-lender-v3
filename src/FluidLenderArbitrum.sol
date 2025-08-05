@@ -39,6 +39,9 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
     /// @dev This is the same on Base and Arbitrum
     ERC20 public constant FLUID =
         ERC20(0x61E030A56D33e8260FdD81f03B162A79Fe3449Cd);
+        
+    /// @notice Dust threshold used to prevent tiny deposits
+    uint256 public constant DUST = 1_000;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -130,7 +133,7 @@ contract FluidLenderArbitrum is UniswapV3Swapper, Base4626Compounder {
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
             // no need to waste gas on depositing dust
-            if (balance > 1_000) {
+            if (balance > DUST) {
                 _deployFunds(balance);
             }
         }

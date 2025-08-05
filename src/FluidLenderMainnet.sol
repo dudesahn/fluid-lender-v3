@@ -28,6 +28,9 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
     /// @notice FLUID token address
     ERC20 public constant FLUID =
         ERC20(0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb);
+        
+    /// @notice Dust threshold used to prevent tiny deposits
+    uint256 public constant DUST = 1_000;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -115,7 +118,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
             // no need to waste gas on depositing dust
-            if (balance > 1_000) {
+            if (balance > DUST) {
                 _deployFunds(balance);
             }
         }

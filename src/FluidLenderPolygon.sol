@@ -28,6 +28,9 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     /// @notice WPOL token address
     ERC20 public constant WPOL =
         ERC20(0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270);
+        
+    /// @notice Dust threshold used to prevent tiny deposits
+    uint256 public constant DUST = 1_000;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -108,13 +111,13 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     function _claimAndSellRewards() internal override {
         // do UniV3 selling here of WPOL to underlying
         uint256 balance = balanceOfRewards();
-        if (balance > minAmountToSell && address(asset) != address(WPOL)) {
+        if (balance > minAmountToSell && !useAuction && address(asset) != address(WPOL)) {
             _swapFrom(address(WPOL), address(asset), balance, 0);
         }
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
             // no need to waste gas on depositing dust
-            if (balance > 1_000) {
+            if (balance > DUST) {
                 _deployFunds(balance);
             }
         }
