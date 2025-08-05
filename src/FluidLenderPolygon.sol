@@ -22,7 +22,7 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     mapping(address => bool) public allowed;
 
     /// @notice Fluid WPOL rewards merkle claim contract
-    IMerkleRewards public constant MERKLE_CLAIM =
+    IMerkleRewards public merkleClaim =
         IMerkleRewards(0xF90D6eA5d0B4CAD69530543CA00eE6cab94B09f4);
 
     /// @notice WPOL token address
@@ -97,7 +97,7 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
         bytes32[] calldata _merkleProof,
         bytes memory _metadata
     ) external {
-        MERKLE_CLAIM.claim(
+        merkleClaim.claim(
             _recipient,
             _cumulativeAmount,
             _positionType,
@@ -197,6 +197,16 @@ contract FluidLenderPolygon is UniswapV3Swapper, Base4626Compounder {
     function setUseAuction(bool _useAuction) external onlyManagement {
         if (_useAuction) require(auction != address(0), "!auction");
         useAuction = _useAuction;
+    }
+
+    /**
+     * @notice Set the address for our merkle claim if it changes.
+     * @dev Can only be called by management.
+     * @param _merkleClaim Address of the merkle claim contract to use.
+     */
+    function setMerkleClaim(address _merkleClaim) external onlyManagement {
+        require(_merkleClaim != address(0), "!zero");
+        merkleClaim = IMerkleRewards(_merkleClaim);
     }
 
     /**
