@@ -57,7 +57,7 @@ contract FluidLenderBase is Base4626Compounder {
     /// @notice USDC token address
     ERC20 public constant USDC =
         ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
-        
+
     /// @notice Dust threshold used to prevent tiny deposits
     uint256 public constant DUST = 1_000;
 
