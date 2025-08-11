@@ -26,7 +26,7 @@ contract FluidLenderBase is Base4626Compounder {
     /// @notice Tick spacing for USDC to asset swaps on Slipstream
     int24 public usdcToAssetSwapTickSpacing;
 
-    /// @notice Set this so we don't try and sell dust.
+    /// @notice Set this so we don't try and sell dust
     uint256 public minAmountToSell;
 
     /// @notice Mapping of addresses and whether they are allowed to deposit to this strategy
@@ -42,7 +42,7 @@ contract FluidLenderBase is Base4626Compounder {
 
     /// @notice Address for Fluid's merkle claim
     /// @dev This is the same on Base and Arbitrum
-    IMerkleRewards public constant MERKLE_CLAIM =
+    IMerkleRewards public merkleClaim =
         IMerkleRewards(0x94312a608246Cecfce6811Db84B3Ef4B2619054E);
 
     /// @notice FLUID token address
@@ -57,6 +57,9 @@ contract FluidLenderBase is Base4626Compounder {
     /// @notice USDC token address
     ERC20 public constant USDC =
         ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+
+    /// @notice Dust threshold used to prevent tiny deposits
+    uint256 public constant DUST = 1_000;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -129,7 +132,7 @@ contract FluidLenderBase is Base4626Compounder {
         bytes32[] calldata _merkleProof,
         bytes memory _metadata
     ) external {
-        MERKLE_CLAIM.claim(
+        merkleClaim.claim(
             _recipient,
             _cumulativeAmount,
             _positionType,
@@ -152,7 +155,7 @@ contract FluidLenderBase is Base4626Compounder {
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
             // no need to waste gas on depositing dust
-            if (balance > 1_000) {
+            if (balance > DUST) {
                 _deployFunds(balance);
             }
         }
@@ -165,7 +168,7 @@ contract FluidLenderBase is Base4626Compounder {
     function _sellWethToAsset() internal {
         uint256 wethBalance = WETH.balanceOf(address(this));
 
-        if (wethBalance > 1e12) {
+        if (wethBalance > DUST) {
             SLIPSTREAM_ROUTER.exactInputSingle(
                 getSwapRouterInput(address(WETH), wethBalance)
             );
@@ -176,7 +179,7 @@ contract FluidLenderBase is Base4626Compounder {
 
         uint256 usdcBalance = USDC.balanceOf(address(this));
 
-        if (usdcBalance > 1e3) {
+        if (usdcBalance > DUST) {
             SLIPSTREAM_ROUTER.exactInputSingle(
                 getSwapRouterInput(address(USDC), usdcBalance)
             );
@@ -299,6 +302,16 @@ contract FluidLenderBase is Base4626Compounder {
         int24 _usdcToAssetSwapTickSpacing
     ) external onlyManagement {
         usdcToAssetSwapTickSpacing = _usdcToAssetSwapTickSpacing;
+    }
+
+    /**
+     * @notice Set the address for our merkle claim if it changes.
+     * @dev Can only be called by management.
+     * @param _merkleClaim Address of the merkle claim contract to use.
+     */
+    function setMerkleClaim(address _merkleClaim) external onlyManagement {
+        require(_merkleClaim != address(0), "!zero");
+        merkleClaim = IMerkleRewards(_merkleClaim);
     }
 
     /**

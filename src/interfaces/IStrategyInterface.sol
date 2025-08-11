@@ -95,4 +95,8 @@ interface IStrategyInterface is IBase4626Compounder, IUniswapV3Swapper {
     function setWethToUsdcSwapTickSpacing(int24) external;
 
     function setUsdcToAssetSwapTickSpacing(int24) external;
+
+    function setMerkleClaim(address) external;
+
+    function merkleClaim() external view returns (address);
 }

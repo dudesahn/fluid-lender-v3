@@ -22,12 +22,15 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
     mapping(address => bool) public allowed;
 
     /// @notice Fluid rewards merkle claim contract
-    IMerkleRewards public constant MERKLE_CLAIM =
+    IMerkleRewards public merkleClaim =
         IMerkleRewards(0x7060FE0Dd3E31be01EFAc6B28C8D38018fD163B0);
 
     /// @notice FLUID token address
     ERC20 public constant FLUID =
         ERC20(0x6f40d4A6237C257fff2dB00FA0510DeEECd303eb);
+
+    /// @notice Dust threshold used to prevent tiny deposits
+    uint256 public constant DUST = 1_000;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -95,7 +98,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
         bytes32[] calldata _merkleProof,
         bytes memory _metadata
     ) external {
-        MERKLE_CLAIM.claim(
+        merkleClaim.claim(
             _recipient,
             _cumulativeAmount,
             _positionType,
@@ -115,7 +118,7 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
         balance = balanceOfAsset();
         if (!TokenizedStrategy.isShutdown()) {
             // no need to waste gas on depositing dust
-            if (balance > 1_000) {
+            if (balance > DUST) {
                 _deployFunds(balance);
             }
         }
@@ -196,6 +199,16 @@ contract FluidLenderMainnet is UniswapV3Swapper, Base4626Compounder {
     function setUseAuction(bool _useAuction) external onlyManagement {
         if (_useAuction) require(auction != address(0), "!auction");
         useAuction = _useAuction;
+    }
+
+    /**
+     * @notice Set the address for our merkle claim if it changes.
+     * @dev Can only be called by management.
+     * @param _merkleClaim Address of the merkle claim contract to use.
+     */
+    function setMerkleClaim(address _merkleClaim) external onlyManagement {
+        require(_merkleClaim != address(0), "!zero");
+        merkleClaim = IMerkleRewards(_merkleClaim);
     }
 
     /**

@@ -397,6 +397,17 @@ contract OperationTest is Setup {
             strategy.setWethToUsdcSwapTickSpacing(100);
             vm.stopPrank();
         }
+
+        // make sure we can adjust our merkle address as expected
+        vm.expectRevert("!management");
+        vm.prank(user);
+        strategy.setMerkleClaim(user);
+        vm.expectRevert("!zero");
+        vm.startPrank(management);
+        strategy.setMerkleClaim(address(0));
+        strategy.setMerkleClaim(user);
+        vm.stopPrank();
+        assertEq(strategy.merkleClaim(), user, "!claim");
     }
 
     function test_profitableReport(

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
+import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
 import {FluidLenderMainnet} from "src/FluidLenderMainnet.sol";
-import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
 contract FluidLenderFactoryMainnet {
     /// @notice Management role controls important setters on this factory and deployed strategies
@@ -70,7 +70,7 @@ contract FluidLenderFactoryMainnet {
 
         // We need to use the custom interface with the
         // tokenized strategies available setters.
-        IStrategyInterface newStrategy = IStrategyInterface(
+        IBase4626Compounder newStrategy = IBase4626Compounder(
             address(new FluidLenderMainnet(_asset, _name, _vault))
         );
         newStrategy.setPerformanceFeeRecipient(performanceFeeRecipient);
@@ -96,7 +96,7 @@ contract FluidLenderFactoryMainnet {
     function isDeployedStrategy(
         address _strategy
     ) external view returns (bool) {
-        try IStrategyInterface(_strategy).asset() returns (address _asset) {
+        try IBase4626Compounder(_strategy).asset() returns (address _asset) {
             return deployments[_asset] == _strategy;
         } catch {
             // If the call fails or reverts, return false
