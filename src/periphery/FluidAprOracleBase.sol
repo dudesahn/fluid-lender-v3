@@ -2,10 +2,11 @@
 pragma solidity 0.8.28;
 
 import {FluidStructs} from "src/libraries/FluidStructs.sol";
-import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC4626, IERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
 import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
+import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSimulator.sol";
 
 contract FluidAprOracleBase {
     /// @notice Operator role can update merkle reward info
@@ -13,6 +14,9 @@ contract FluidAprOracleBase {
 
     /// @notice Whether we manually set the rewards APR instead of calculating using price and manual reward rates
     bool public useManualRewardsApr;
+
+    /// @notice Whether we should use UniV3 or Fluid DEX to price FLUID
+    bool public useUniV3;
 
     /// @notice Mapping for Fluid market => reward tokens per second (in FLUID)
     mapping(address market => uint256 rewardTokensPerSecond) public rewards;
@@ -40,8 +44,18 @@ contract FluidAprOracleBase {
     address public constant FLUID_WETH_DEX =
         0xdE632C3a214D5f14C1d8ddF0b92F8BCd188fee45;
 
+    /// @notice Uniswap V3 router
+    address public constant UNISWAP_V3_ROUTER =
+        0xf6D01e649B5982c50C552f0cFa6eF61A3065Ec48;
+
+    /// @notice FLUID token address
+    address public constant FLUID = 0x61E030A56D33e8260FdD81f03B162A79Fe3449Cd;
+
     /// @notice WETH token address
     address public constant WETH = 0x4200000000000000000000000000000000000006;
+
+    address internal constant FLUID_UNI_POOL =
+        0x3b3d1a85A248b70100e95437dbeeBCAE5E7eC7a1;
 
     /// @notice Seconds in a year
     uint256 public constant YEAR = 31536000;
@@ -49,6 +63,7 @@ contract FluidAprOracleBase {
     constructor(address _operator) {
         require(_operator != address(0), "ZERO_ADDRESS");
         operator = _operator;
+        useUniV3 = true;
     }
 
     modifier onlyOperator() {
@@ -199,17 +214,45 @@ contract FluidAprOracleBase {
 
     /// @notice Get price of FLUID token in USDC.
     function getFluidPriceUsdc() public view returns (uint256 fluidPrice) {
-        // pull the price from the Fluid DEX
-        uint256 storageVar = DEX_RESOLVER.getDexVariablesRaw(FLUID_WETH_DEX);
+        // check if there is a single FLUID in the UniV3 pool
+        uint256 fluidBal = IERC20(FLUID).balanceOf(FLUID_UNI_POOL);
+        if (useUniV3 && fluidBal > 1e18) {
+            uint256 fluidInWeth = UniswapV3SwapSimulator
+                .simulateExactInputSingle(
+                    ISwapRouter(UNISWAP_V3_ROUTER),
+                    ISwapRouter.ExactInputSingleParams({
+                        tokenIn: FLUID,
+                        tokenOut: WETH,
+                        fee: 10_000, // base uses 1%
+                        recipient: address(0),
+                        deadline: block.timestamp,
+                        amountIn: 1e18,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    })
+                );
 
-        /// Next 40 bits => 41-80 => last stored price of pool. BigNumber (32 bits precision, 8 bits exponent)
-        uint256 X40 = 0xffffffffff;
-        uint256 X8 = 0xff;
-        uint256 fluidInWeth = (storageVar >> 41) & X40;
-        fluidInWeth = (fluidInWeth >> 8) << (fluidInWeth & X8);
+            // use chainlink to convert weth to USDC (6 decimals)
+            fluidPrice =
+                (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) /
+                1e18;
+        } else {
+            // pull the price from Fluid DEX
+            uint256 storageVar = DEX_RESOLVER.getDexVariablesRaw(
+                FLUID_WETH_DEX
+            );
 
-        // use chainlink to convert weth to USDC (6 decimals)
-        fluidPrice = (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) / 1e27;
+            /// Next 40 bits => 41-80 => last stored price of pool. BigNumber (32 bits precision, 8 bits exponent)
+            uint256 X40 = 0xffffffffff;
+            uint256 X8 = 0xff;
+            uint256 fluidInWeth = (storageVar >> 41) & X40;
+            fluidInWeth = (fluidInWeth >> 8) << (fluidInWeth & X8);
+
+            // use chainlink to convert weth to USDC (6 decimals)
+            fluidPrice =
+                (fluidInWeth * CHAINLINK_CALCS.getPriceUsdc(WETH)) /
+                1e27;
+        }
     }
 
     /* ========== SETTERS ========== */
@@ -244,6 +287,15 @@ contract FluidAprOracleBase {
             require(useManualRewardsApr, "!manualRewards");
         }
         manualRewardsApr[_market] = _manualRewardsApr;
+    }
+
+    /**
+     * @notice Set whether to use UniV3 or Fluid DEX to price FLUID.
+     * @dev May only be called by operator.
+     * @param _useUniV3 Whether to use UniV3 or Fluid for FLUID price.
+     */
+    function setUseUniV3(bool _useUniV3) external onlyOperator {
+        useUniV3 = _useUniV3;
     }
 
     /**
