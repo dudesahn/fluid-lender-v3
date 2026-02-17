@@ -20,6 +20,10 @@ import "forge-std/Script.sol";
 // no constructor (or thus, constructor args) on this one
 // forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "CONTRACT_ADDRESS" CONTRACT_NAME
 
+// for the uniV3 version
+// forge verify-contract --rpc-url $BASE_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x493B566F7A773f393735eb71B6bDDCcF5D1a8aec" UniswapV3SwapSimulator
+// forge verify-contract --rpc-url $BASE_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0xe15D914513868DE594909e05AC530F0c0d5d6036" FluidAprOracleBase
+
 contract DeployAprOracles is Script {
     /// @notice Deployer
     address public constant MANAGEMENT =
@@ -47,4 +51,5 @@ contract DeployAprOracles is Script {
 }
 
 // base apr oracle deployed at: 0x56141Aa434C0bdddda695B857C12968DB33a2d49
+// base apr oracle V2 deployed at: 0xe15D914513868DE594909e05AC530F0c0d5d6036 (third deployment, had to fix swap fee BPS and added logic to check FLUID balance of UniV3 pool)
 // arbitrum apr oracle deployed at: 0x020C9d54744f8b9778CdEBA954395f2b7f5540Ae
