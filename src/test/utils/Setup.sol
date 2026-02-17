@@ -135,7 +135,7 @@ contract Setup is Test, IEvents {
             } else {
                 // weth
                 fluidVault = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
-            }
+            } // GHO: 0x6A29A46E21C730DcA1d8b23d637c101cec605C5B
         } else if (block.chainid == 137) {
             if (address(asset) == tokenAddrs["USDC"]) {
                 fluidVault = 0x571d456b578fDC34E26E6D636736ED7c0CDB9d89;
@@ -159,7 +159,7 @@ contract Setup is Test, IEvents {
             } else {
                 // weth
                 fluidVault = 0x9272D6153133175175Bc276512B2336BE3931CE9;
-            }
+            } // GHO: 0x8DdbfFA3CFda2355a23d6B11105AC624BDbE3631
         } else if (block.chainid == 42161) {
             if (address(asset) == tokenAddrs["USDC"]) {
                 fluidVault = 0x1A996cb54bb95462040408C06122D45D6Cdb6096;
@@ -172,7 +172,7 @@ contract Setup is Test, IEvents {
             } else {
                 // weth
                 fluidVault = 0x45Df0656F8aDf017590009d2f1898eeca4F0a205;
-            }
+            } // GHO: 0x037dFf1C12805707d7c29F163E0F09fC9102657A
         }
 
         // Set decimals
