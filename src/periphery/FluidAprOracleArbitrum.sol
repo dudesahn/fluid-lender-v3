@@ -6,8 +6,16 @@ import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.so
 import {IBase4626Compounder} from "@periphery/Bases/4626Compounder/IBase4626Compounder.sol";
 import {ILendingResolver, ILiquidtyResolver, IDexResolver} from "src/interfaces/FluidInterfaces.sol";
 import {IChainlinkCalcs} from "src/interfaces/IChainlinkCalcs.sol";
+import {console2} from "forge-std/console2.sol";
+interface IChainlink {
+    function latestAnswer() external view returns (int256);
+}
 
 contract FluidAprOracleArbitrum {
+    struct ArbRewardRate {
+        uint256 endTimeStamp;
+        uint256 rewardRate;
+    }
     /// @notice Operator role can update merkle reward info
     address public operator;
 
@@ -45,6 +53,18 @@ contract FluidAprOracleArbitrum {
 
     /// @notice Seconds in a year
     uint256 public constant YEAR = 31536000;
+
+    address internal constant fGHO = 0x037dFf1C12805707d7c29F163E0F09fC9102657A;
+
+    address internal constant fUSDC = 0x1A996cb54bb95462040408C06122D45D6Cdb6096;
+
+    address internal constant fUSDT = 0x4A03F37e7d3fC243e3f99341d36f4b829BEe5E03;
+
+    address internal constant ARB = 0x912CE59144191C1204E64559FE8253a0e49E6548;
+
+    IChainlink internal constant ARB_FEED = IChainlink(0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6);
+
+    ArbRewardRate public arbRewardRate;
 
     event OperatorSet(address indexed operator);
 
@@ -189,6 +209,8 @@ contract FluidAprOracleArbitrum {
                     assets;
             }
         }
+
+        fluidRewardRate += getArbRewardApr(fToken, assets);
     }
 
     /// @notice Get price of FLUID token in USDC.
@@ -260,5 +282,50 @@ contract FluidAprOracleArbitrum {
         bool _useManualRewardsApr
     ) external onlyOperator {
         useManualRewardsApr = _useManualRewardsApr;
+    }
+
+    /**
+     * @notice Set the DAILY reward rate for ARB and the end of the campaign.
+     * @param _endTimeStamp The end time of the ARB reward rate.
+     * @param _rewardRate The reward rate for the ARB reward rate.
+     */ 
+    function setArbRewardRate(uint256 _endTimeStamp, uint256 _rewardRate) external onlyOperator {
+        arbRewardRate = ArbRewardRate({
+            endTimeStamp: _endTimeStamp,
+            rewardRate: _rewardRate
+        });
+    }
+
+
+    function getArbRewardApr(address _fToken, uint256 _assets) public view returns (uint256 arbRewardApr) {
+        if (_fToken != fGHO && _fToken != fUSDC && _fToken != fUSDT) {
+            return 0;
+        }
+
+        ArbRewardRate memory currentArbRewardRate = arbRewardRate;
+        if (currentArbRewardRate.endTimeStamp < block.timestamp) {
+            return 0;
+        }
+
+        FluidStructs.FTokenDetails memory tokenDetails;
+        if (_fToken != fGHO) {
+            _assets *= 1e12;
+            tokenDetails = LENDING_RESOLVER.getFTokenDetails(fGHO);
+            _assets += tokenDetails.totalAssets;
+        }
+        
+        if (_fToken != fUSDC) {
+            tokenDetails = LENDING_RESOLVER.getFTokenDetails(fUSDC);
+            _assets += tokenDetails.totalAssets * 1e12;
+        }
+        
+        if (_fToken != fUSDT) {
+            tokenDetails = LENDING_RESOLVER.getFTokenDetails(fUSDT);
+            _assets += tokenDetails.totalAssets * 1e12;
+        }
+
+        uint256 arbPrice = uint256(ARB_FEED.latestAnswer()) * 1e10;
+
+        arbRewardApr = (currentArbRewardRate.rewardRate * 365 * arbPrice) / _assets;
     }
 }

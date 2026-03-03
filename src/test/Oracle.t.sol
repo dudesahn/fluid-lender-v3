@@ -52,6 +52,7 @@ contract OracleTest is Setup {
 
             // set the rewards rate for our oracle
             oracle.setRewardsRate(fluidVault, extraRewardRate);
+            oracle.setArbRewardRate(block.timestamp + 100 days, 23571e18);
         }
         vm.stopPrank();
     }

@@ -44,4 +44,6 @@ interface IOracle {
         address _market,
         uint256 _manualRewardsApr
     ) external;
+
+    function setArbRewardRate(uint256 _endTimeStamp, uint256 _rewardRate) external;
 }
